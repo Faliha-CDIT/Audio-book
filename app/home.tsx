@@ -2,7 +2,6 @@
 import MiniPlayer from "@/components/MiniPlayer"
 import { useAppContext } from "@/context/AppContext"
 import { Ionicons } from "@expo/vector-icons"
-import { Video } from "expo-av"
 import { Image } from "expo-image"
 import { usePathname, useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
@@ -11,75 +10,66 @@ import { Fonts } from "../constants/Fonts"
 
 type Section = "home" | "library" | "discover" | "profile"
 
+interface Book {
+  id: string
+  title: string
+  cover: any
+  route: string
+}
+
+const BOOKS: Book[] = [
+  { id: "1", title: "Cover Case", cover: require("../assets/images/cover case.jpg"), route: "/book-details/1" },
+  { id: "2", title: "Chalachitra Sidhandangal", cover: require("../assets/images/cover  chalachitra sidhandangal-3.jpg"), route: "/book-details/2" },
+  { id: "3", title: "Hasthalikhitham", cover: require("../assets/images/Hasthalikhitham.jpg"), route: "/book-details/3" },
+  { id: "4", title: "Kumaranasan Vijnankosham", cover: require("../assets/images/Kumaranasan Vijnankosham_FINAL COVER.jpg"), route: "/book-details/4" },
+  { id: "5", title: "Nirmithabudhi", cover: require("../assets/images/Nirmithabudhi.jpg"), route: "/book-details/5" },
+  { id: "6", title: "Parinamam", cover: require("../assets/images/parinamam.jpg"), route: "/book-details/6" },
+  { id: "7", title: "Samoohasasthram", cover: require("../assets/images/Samoohasasthram.jpg"), route: "/book-details/7" },
+  { id: "8", title: "Vaikom", cover: require("../assets/images/vaikom cover-1.jpg"), route: "/book-details/8" },
+  { id: "9", title: "Jyothisastram", cover: require("../assets/images/jyothisastram.jpg"), route: "/book-details/9" },
+]
+
 export default function AudioBookApp() {
   const [activeSection, setActiveSection] = useState<Section>("home")
   const router = useRouter()
   const pathname = usePathname()
-  const videoRef = useRef<Video>(null)
   const { isPlaying, currentElement, sound } = useAppContext()
-  const [shouldUnmuteVideo, setShouldUnmuteVideo] = useState(false)
-  const [autoMuteExpired, setAutoMuteExpired] = useState(false)
+  
+  const SCREEN_WIDTH = Dimensions.get("window").width
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const sliderRef = useRef<ScrollView>(null)
 
-  // Stop video audio after a short period from app open
+  // Auto-scroll carousel
   useEffect(() => {
-    const timer = setTimeout(() => setAutoMuteExpired(true), 2 * 60 * 1000) // mute after 2 minutes
-    return () => clearTimeout(timer)
-  }, [])
+    const interval = setInterval(() => {
+      const nextSlide = (currentSlide + 1) % BOOKS.length
+      setCurrentSlide(nextSlide)
+      sliderRef.current?.scrollTo({ x: nextSlide * SCREEN_WIDTH, animated: true })
+    }, 4000) // change every 4 seconds
 
-  // Handle video muting/unmuting based on element audio playback and home page state
-  useEffect(() => {
-    const isHomeRoute = pathname === "/" || pathname === "/home" || pathname === "/index"
-    const isElementDetail = pathname?.includes("element-detail")
-    const hasElementAudio = isPlaying || !!currentElement || !!sound
-    const blockVideoAudio = autoMuteExpired || !isHomeRoute || isElementDetail
-
-    // If any element audio is playing or we shouldn't allow video audio, mute immediately
-    if (hasElementAudio || blockVideoAudio || activeSection !== "home") {
-      setShouldUnmuteVideo(false)
-      return
-    }
-
-    // Only unmute if we're on home page and no element audio is playing
-    const timer = setTimeout(() => {
-      const stillAllowed =
-        !autoMuteExpired &&
-        !isElementDetail &&
-        isHomeRoute &&
-        activeSection === "home" &&
-        !isPlaying &&
-        !currentElement &&
-        !sound
-      setShouldUnmuteVideo(stillAllowed)
-    }, 500) // debounce to ensure element audio has fully stopped
-
-    return () => clearTimeout(timer)
-  }, [isPlaying, activeSection, currentElement, sound, pathname, autoMuteExpired])
-
-const handleCardPress = async () => {
-  if (videoRef.current) {
-    try {
-      await videoRef.current.setIsMutedAsync(true);
-    } catch (error) {
-      console.error("Error muting video:", error);
-    }
-  }
-
-  router.push("/periodic-table");
-};
+    return () => clearInterval(interval)
+  }, [currentSlide, BOOKS.length])
 
 
   const renderHomeSection = () => (
     <ScrollView style={styles.homeContainer}>
       <View style={[styles.heroSection, { paddingHorizontal: 0 }]}>
         <View style={[styles.heroContent, { paddingHorizontal: 24 }]}>
-          <View style={styles.heroTextBlock}>
-            {/* <Text style={styles.welcomeText}>Welcome to</Text>
-            <Text style={styles.heroTitle}>AudioBook Hub</Text>
-            <Text style={styles.heroSubtitle}>Discover amazing audio content</Text> */}
-            <Text style={styles.welcomeText}>സ്വാഗതം</Text>
-            <Text style={styles.heroTitle}>ആഡിയോബുക്ക് ഹബ്</Text>
-            <Text style={styles.heroSubtitle}>അദ്ഭുതകരമായ ഓഡിയോ ഉള്ളടക്കം കണ്ടെത്തൂ</Text>
+          <View style={{ flex: 1 }}>
+            <View style={styles.heroTextBlock}>
+              {/* <Text style={styles.welcomeText}>Welcome to</Text>
+              <Text style={styles.heroTitle}>AudioBook Hub</Text>
+              <Text style={styles.heroSubtitle}>Discover amazing audio content</Text> */}
+              <Text style={styles.welcomeText}>സ്വാഗതം</Text>
+              <Text style={styles.heroTitle}>ആഡിയോബുക്ക് ഹബ്</Text>
+              <Text style={styles.heroSubtitle}>അദ്ഭുതകരമായ ഓഡിയോ ഉള്ളടക്കം കണ്ടെത്തൂ</Text>
+            </View>
 
+            {/* QR Code Button */}
+            <TouchableOpacity style={styles.qrButton} onPress={() => router.push("/qr-code")}>
+              <Ionicons name="qr-code" size={20} color="#fff" />
+              <Text style={styles.qrButtonText}>Share via QR</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -108,18 +98,36 @@ const handleCardPress = async () => {
           </View>
         </View> */}
         <View style={styles.sliderContainer}>
-          <Video
-            ref={videoRef}
-            source={require("../assets/images/sarva_2.mp4")}
-            rate={1.0}
-            volume={shouldUnmuteVideo ? 1.0 : 0}
-            isMuted={!shouldUnmuteVideo}
-            useNativeControls
-            isLooping={!autoMuteExpired}
-            style={styles.videoPlayer}
-            progressUpdateIntervalMillis={500}
-            shouldPlay={!autoMuteExpired}
-          />
+          <ScrollView
+            ref={sliderRef}
+            horizontal
+            pagingEnabled
+            scrollEventThrottle={16}
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH)
+              setCurrentSlide(idx)
+            }}
+          >
+            {BOOKS.map((book, i) => (
+              <TouchableOpacity 
+                key={i} 
+                style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}
+                onPress={() => router.push(book.route)}
+              >
+                <Image source={book.cover} style={styles.sliderImage} contentFit="cover" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <View style={styles.dots}>
+            {BOOKS.map((_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i === currentSlide && styles.activeDot]}
+              />
+            ))}
+          </View>
         </View>
       </View>
 
@@ -127,95 +135,21 @@ const handleCardPress = async () => {
         <Text style={styles.sectionTitle}>Featured Content</Text>
 
         <View style={styles.cardGrid}>
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/cover case.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/cover  chalachitra sidhandangal-3.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/Hasthalikhitham.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/Kumaranasan Vijnankosham_FINAL COVER.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/Nirmithabudhi.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/parinamam.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/Samoohasasthram.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/vaikom cover-1.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.featuredCardTeal} onPress={handleCardPress}>
-            <View style={styles.cardIconTop}>
-              <Image
-                source={require("../assets/images/jyothisastram.jpg")}
-                style={{ width: 220, height: 220 }}
-                resizeMode="contain"
-              />
-            </View>
-          </TouchableOpacity>
+          {BOOKS.map((book) => (
+            <TouchableOpacity 
+              key={book.id}
+              style={styles.featuredCardTeal} 
+              onPress={() => router.push(book.route)}
+            >
+              <View style={styles.cardIconTop}>
+                <Image
+                  source={book.cover}
+                  style={{ width: 220, height: 220 }}
+                  resizeMode="contain"
+                />
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     </ScrollView>
@@ -460,5 +394,21 @@ const styles = StyleSheet.create({
   },
   activeNavText: {
     color: "#F500E2",
+  },
+  qrButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#3498db",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+    alignSelf: "flex-start",
+  },
+  qrButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
   },
 })

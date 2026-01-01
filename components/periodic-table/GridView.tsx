@@ -5,6 +5,7 @@ import { useRef, useState } from "react"
 import {
     ActivityIndicator,
     Animated,
+    Dimensions,
     FlatList,
     ScrollView,
     StyleSheet,
@@ -12,6 +13,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    useWindowDimensions,
 } from "react-native"
 import type { Element } from "../../context/AppContext"
 import { useAppContext } from "../../context/AppContext"
@@ -24,6 +26,8 @@ export default function GridView() {
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [showSearch, setShowSearch] = useState<boolean>(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const { width, height } = useWindowDimensions()
+  const isLandscape = width > height
 
   // For scroll indicators
   const categoryScrollViewRef = useRef<ScrollView>(null)
@@ -35,6 +39,9 @@ export default function GridView() {
   // Animated values for arrow opacity
   const leftArrowOpacity = useRef(new Animated.Value(0)).current
   const rightArrowOpacity = useRef(new Animated.Value(1)).current
+
+  // Determine number of columns based on screen orientation
+  const numColumns = isLandscape ? (width > 1024 ? 6 : 5) : 3
 
   const handleSearch = (text: string) => {
     setSearchQuery(text)
@@ -203,8 +210,8 @@ export default function GridView() {
         data={filteredElements}
         renderItem={renderGridItem}
         keyExtractor={(item) => item.number.toString()}
-        numColumns={3}
-        contentContainerStyle={styles.gridContainer}
+        numColumns={numColumns}
+        contentContainerStyle={[styles.gridContainer, { paddingBottom: isLandscape ? 40 : 80 }]}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No elements found</Text>
@@ -349,6 +356,7 @@ const styles = StyleSheet.create({
     padding: 8,
     justifyContent: "center",
     alignItems: "center",
+    minHeight: 80,
   },
   atomicNumber: {
     position: "absolute",

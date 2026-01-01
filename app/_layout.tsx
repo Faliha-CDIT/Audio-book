@@ -8,6 +8,18 @@ import { AppProvider } from "../context/AppContext"
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync()
 
+const linking = {
+  prefixes: ['audiobook://', 'https://audiobook.app'],
+  config: {
+    screens: {
+      home: 'home',
+      'periodic-table': 'periodic-table',
+      'qr-code': 'qr-code',
+      index: '',
+    },
+  },
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     'Exo2-Regular': require('../assets/fonts/Exo2-Regular.ttf'),
@@ -51,9 +63,12 @@ export default function RootLayout() {
           },
         }}
       >
+        <Stack.Screen name="intro" options={{ headerShown: false }} />
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="home" options={{ headerShown: false }} />
         <Stack.Screen name="periodic-table" options={{ headerShown: false }} />
+        <Stack.Screen name="qr-code" options={{ headerShown: false }} />
+        <Stack.Screen name="book-details" options={{ headerShown: false }} />
       </Stack>
     </AppProvider>
   )

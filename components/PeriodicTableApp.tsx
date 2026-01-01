@@ -1,8 +1,8 @@
 "use client"
 
 import { Ionicons } from "@expo/vector-icons"
-import { useState } from "react"
-import { StyleSheet, Text, View } from "react-native"
+import { useEffect, useState } from "react"
+import { Dimensions, StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import { Fonts } from "../constants/Fonts"
 import ElementDetailView from "./periodic-table/ElementDetailView"
 import FavoritesView from "./periodic-table/FavoritesView"
@@ -17,6 +17,8 @@ interface PeriodicTableAppProps {
 
 export default function PeriodicTableApp({ onBack }: PeriodicTableAppProps) {
   const [activeTab, setActiveTab] = useState<TabType>("table")
+  const { width, height } = useWindowDimensions()
+  const isLandscape = width > height
 
   const renderContent = () => {
     switch (activeTab) {
@@ -31,6 +33,47 @@ export default function PeriodicTableApp({ onBack }: PeriodicTableAppProps) {
       default:
         return <TableView />
     }
+  }
+
+  if (isLandscape) {
+    return (
+      <View style={styles.landscapeContainer}>
+        {/* Side Navigation */}
+        <View style={styles.sideNav}>
+          <TabButton
+            icon="grid-outline"
+            label="Table"
+            active={activeTab === "table"}
+            onPress={() => setActiveTab("table")}
+            isVertical
+          />
+          <TabButton
+            icon="apps-outline"
+            label="Grid"
+            active={activeTab === "grid"}
+            onPress={() => setActiveTab("grid")}
+            isVertical
+          />
+          <TabButton
+            icon="star-outline"
+            label="Favorites"
+            active={activeTab === "favorites"}
+            onPress={() => setActiveTab("favorites")}
+            isVertical
+          />
+          <TabButton
+            icon="information-circle-outline"
+            label="Details"
+            active={activeTab === "detail"}
+            onPress={() => setActiveTab("detail")}
+            isVertical
+          />
+        </View>
+
+        {/* Content */}
+        <View style={styles.landscapeContent}>{renderContent()}</View>
+      </View>
+    )
   }
 
   return (
@@ -74,13 +117,14 @@ interface TabButtonProps {
   label: string
   active: boolean
   onPress: () => void
+  isVertical?: boolean
 }
 
-function TabButton({ icon, label, active, onPress }: TabButtonProps) {
+function TabButton({ icon, label, active, onPress, isVertical = false }: TabButtonProps) {
   return (
-    <View style={[styles.tabButton, active && styles.activeTab]}>
+    <View style={[styles.tabButton, isVertical && styles.verticalTabButton, active && styles.activeTab]}>
       <Ionicons name={icon as any} size={24} color={active ? "#3498db" : "#ccc"} />
-      <Text style={[styles.tabText, active && styles.activeTabText]}>{label}</Text>
+      <Text style={[styles.tabText, isVertical && styles.verticalTabText, active && styles.activeTabText]}>{label}</Text>
     </View>
   )
 }
@@ -90,7 +134,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f0f1a",
   },
+  landscapeContainer: {
+    flex: 1,
+    backgroundColor: "#0f0f1a",
+    flexDirection: "row",
+  },
+  sideNav: {
+    width: 80,
+    backgroundColor: "#1a1a2e",
+    borderRightWidth: 1,
+    borderRightColor: "#16213e",
+    paddingVertical: 12,
+    justifyContent: "flex-start",
+  },
   content: {
+    flex: 1,
+  },
+  landscapeContent: {
     flex: 1,
   },
   bottomNav: {
@@ -105,6 +165,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 8,
   },
+  verticalTabButton: {
+    flex: 0,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+  },
   activeTab: {
     // Additional styling for active tab if needed
   },
@@ -113,6 +179,10 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     color: "#ccc",
     marginTop: 4,
+  },
+  verticalTabText: {
+    fontSize: 10,
+    marginTop: 2,
   },
   activeTabText: {
     color: "#3498db",

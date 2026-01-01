@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cdit.AudioBook"
     },
     "android": {
       "adaptiveIcon": {
@@ -41,7 +42,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "af84b6ae-cd92-436d-992e-5e0aeb826425"
       }
