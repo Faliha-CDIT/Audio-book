@@ -5,7 +5,6 @@ import { useRef, useState } from "react"
 import {
     ActivityIndicator,
     Animated,
-    Dimensions,
     FlatList,
     ScrollView,
     StyleSheet,
@@ -13,7 +12,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    useWindowDimensions,
+    useWindowDimensions
 } from "react-native"
 import type { Element } from "../../context/AppContext"
 import { useAppContext } from "../../context/AppContext"

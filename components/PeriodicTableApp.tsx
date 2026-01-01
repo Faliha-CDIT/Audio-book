@@ -1,8 +1,8 @@
 "use client"
 
 import { Ionicons } from "@expo/vector-icons"
-import { useEffect, useState } from "react"
-import { Dimensions, StyleSheet, Text, View, useWindowDimensions } from "react-native"
+import { useState } from "react"
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native"
 import { Fonts } from "../constants/Fonts"
 import ElementDetailView from "./periodic-table/ElementDetailView"
 import FavoritesView from "./periodic-table/FavoritesView"

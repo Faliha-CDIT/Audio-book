@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons"
+import Constants from "expo-constants"
 import { useRouter } from "expo-router"
 import { useRef } from "react"
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from "react-native"
 import QRCode from "react-native-qrcode-svg"
-import Constants from "expo-constants"
 
 export default function QRCodeScreen() {
   const router = useRouter()
