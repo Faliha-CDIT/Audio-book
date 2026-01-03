@@ -132,7 +132,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Load and play audio if available
       if (element.audio_url) {
         try {
-          const { sound: newSound } = await Audio.Sound.createAsync({ uri: element.audio_url }, { shouldPlay: true })
+          let audioSource
+          
+          // Check if it's a local file marker
+          if (element.audio_url.startsWith("local://")) {
+            // Handle local audio files
+            const audioType = element.audio_url.replace("local://", "")
+            if (audioType === "introduction") {
+              audioSource = require("../assets/audio/MOOLAKAVIJNANAKOSHAM INTRODUCTION.mp3")
+            } else if (audioType === "conclusion") {
+              audioSource = require("../assets/audio/CONCLUSION.mp3")
+            } else {
+              audioSource = { uri: element.audio_url }
+            }
+          } else {
+            // Remote URL
+            audioSource = { uri: element.audio_url }
+          }
+          
+          const { sound: newSound } = await Audio.Sound.createAsync(audioSource, { shouldPlay: true })
 
           setSound(newSound)
 

@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   miniPlayerSpace: {
-    height: 65,
+    height: 70,
     backgroundColor: "transparent",
   },
 })

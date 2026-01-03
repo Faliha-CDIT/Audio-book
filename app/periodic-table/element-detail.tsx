@@ -1,6 +1,7 @@
 "use client"
 
 import { Ionicons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useState } from "react"
 import {
@@ -8,6 +9,7 @@ import {
   Dimensions,
   PanResponder,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -69,6 +71,9 @@ export default function ElementDetailScreen() {
 
   // Use the element from params, found element, or current element from context
   const displayElement = foundElement || (params.showFavorites === "true" ? null : currentElement)
+  
+  // Check if element is special (Introduction or Conclusion)
+  const isSpecial = displayElement?.category === "special"
 
   const isFavorite = displayElement ? favorites.includes(displayElement.number) : false
 
@@ -152,7 +157,7 @@ export default function ElementDetailScreen() {
         <Text style={styles.sectionTitle}>Your Favorite Elements</Text>
         {favoriteElements.length === 0 ? (
           <Text style={styles.noFavoritesText}>
-            You haven't added any favorites yet. Long press on any element to add it to favorites.
+            You haven&apos;t added any favorites yet. Long press on any element to add it to favorites.
           </Text>
         ) : (
           <View style={styles.favoritesList}>
@@ -225,6 +230,34 @@ export default function ElementDetailScreen() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`
   }
 
+  const handleShare = async () => {
+    try {
+      const shareContent = isSpecial
+        ? `Check out ${displayElement.name} from the Periodic Table Audio Book!`
+        : `Check out ${displayElement.name} (${displayElement.symbol}) - Atomic Number ${displayElement.number}\n\nCategory: ${displayElement.category}\nAtomic Mass: ${displayElement.atomic_mass} u\n\nFrom the Periodic Table Audio Book!`
+
+      const result = await Share.share({
+        message: shareContent,
+        title: `${displayElement.name} - Periodic Table Audio Book`,
+      })
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // Shared with activity type of result.activityType
+          console.log("Shared with activity type:", result.activityType)
+        } else {
+          // Shared
+          console.log("Content shared successfully")
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // Dismissed
+        console.log("Share dismissed")
+      }
+    } catch (error) {
+      console.error("Error sharing:", error)
+    }
+  }
+
   // Get element-specific glow color based on category or number
   const getElementGlowColor = () => {
     if (!displayElement) return "#00ffff"
@@ -240,9 +273,20 @@ export default function ElementDetailScreen() {
       "metalloid": "#00ff00",
       "halogen": "#ff4444",
       "noble gas": "#00ddff",
+      "special": "#F500E2",
     }
     
     return colorMap[displayElement.category.toLowerCase()] || "#00ffff"
+  }
+  
+  // Helper to add opacity to hex color
+  const addOpacity = (color: string, opacity: number) => {
+    // Convert hex to rgba
+    const hex = color.replace('#', '')
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
   }
 
   // Check if this element is the one currently playing
@@ -266,6 +310,26 @@ export default function ElementDetailScreen() {
               },
             ]}
           >
+            {/* Outer glow shadow layer */}
+            <View
+              style={[
+                styles.coverArtShadow,
+                {
+                  backgroundColor: getElementGlowColor(),
+                  shadowColor: getElementGlowColor(),
+                },
+              ]}
+            />
+            {/* Glossy border/glow effect */}
+            <View
+              style={[
+                styles.coverArtGlow,
+                {
+                  borderColor: getElementGlowColor(),
+                  shadowColor: getElementGlowColor(),
+                },
+              ]}
+            />
             <View
               style={[
                 styles.coverArt,
@@ -275,20 +339,63 @@ export default function ElementDetailScreen() {
                 },
               ]}
             >
-              <Text style={[styles.coverSymbol, { color: getElementGlowColor(),  textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 15 }]}>
-                {displayElement.symbol}
-              </Text>
-              <Text style={[styles.coverNumber, { color: getElementGlowColor(),  textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 }]}>
-                {displayElement.number}
-              </Text>
-              <View
-                style={[
-                  styles.coverGlossyOverlay,
-                  {
-                    borderColor: getElementGlowColor(),
-                  },
+              {/* Base gradient for 3D depth */}
+              <LinearGradient
+                colors={[
+                  getElementGlowColor(),
+                  addOpacity(getElementGlowColor(), 0.9),
+                  addOpacity(getElementGlowColor(), 0.8),
                 ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.coverArtGradient}
               />
+              
+              {/* Top highlight gradient */}
+              <LinearGradient
+                colors={[
+                  "rgba(255, 255, 255, 0.4)",
+                  "rgba(255, 255, 255, 0.15)",
+                  "transparent",
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 0.5 }}
+                style={styles.coverArtTopHighlight}
+              />
+              
+              {/* Bottom shadow gradient */}
+              <LinearGradient
+                colors={[
+                  "transparent",
+                  "rgba(0, 0, 0, 0.3)",
+                  "rgba(0, 0, 0, 0.5)",
+                ]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.coverArtBottomShadow}
+              />
+              
+              {/* Inner border highlight */}
+              <View style={styles.coverArtInnerBorder} />
+              
+              {/* Glossy overlay for 3D effect */}
+              <View style={styles.coverGlossyOverlay} />
+              
+              {/* Text with embossed effect */}
+              <View style={styles.coverSymbolContainer}>
+                <Text style={[styles.coverSymbolShadow, { color: "rgba(0, 0, 0, 0.2)" }]}>
+                  {displayElement.symbol}
+                </Text>
+                <Text style={[styles.coverSymbol, { color: "#000" }]}>
+                  {displayElement.symbol}
+                </Text>
+              </View>
+              
+              {!isSpecial && (
+                <Text style={[styles.coverNumber, { color: "rgba(0, 0, 0, 0.7)" }]}>
+                  {displayElement.number}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -313,7 +420,7 @@ export default function ElementDetailScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.controlButton}>
+            <TouchableOpacity style={styles.controlButton} onPress={handleShare}>
               <Ionicons name="share-social-outline" size={22} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -348,35 +455,37 @@ export default function ElementDetailScreen() {
           </View>
         </View>
 
-        {/* Details */}
-        <View style={styles.detailsCard}>
-          <Text style={styles.sectionTitle}>Element Details</Text>
+        {/* Details - Hide for special elements (Introduction and Conclusion) */}
+        {!isSpecial && (
+          <View style={styles.detailsCard}>
+            <Text style={styles.sectionTitle}>Element Details</Text>
 
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Atomic Mass:</Text>
-            <Text style={styles.detailValue}>{displayElement.atomic_mass} u</Text>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Atomic Mass:</Text>
+              <Text style={styles.detailValue}>{displayElement.atomic_mass} u</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Electron Configuration:</Text>
+              <Text style={styles.detailValue}>{displayElement.electron_configuration}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Discovered by:</Text>
+              <Text style={styles.detailValue}>{displayElement.discovered_by || "Unknown"}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Phase:</Text>
+              <Text style={styles.detailValue}>{displayElement.phase}</Text>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Density:</Text>
+              <Text style={styles.detailValue}>{displayElement.density} g/cm³</Text>
+            </View> 
           </View>
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Electron Configuration:</Text>
-            <Text style={styles.detailValue}>{displayElement.electron_configuration}</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Discovered by:</Text>
-            <Text style={styles.detailValue}>{displayElement.discovered_by || "Unknown"}</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Phase:</Text>
-            <Text style={styles.detailValue}>{displayElement.phase}</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Density:</Text>
-            <Text style={styles.detailValue}>{displayElement.density} g/cm³</Text>
-          </View> 
-        </View>
+        )}
       </View>
     </ScrollView>
   )
@@ -433,42 +542,121 @@ const styles = StyleSheet.create({
   coverArtOuter: {
     width: screenWidth * 0.65,
     height: screenWidth * 0.65,
-    borderRadius: 20,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.8,
-    shadowRadius: 25,
-    elevation: 30,
+    position: "relative",
     marginBottom: 16,
+  },
+  coverArtShadow: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 24,
+    opacity: 0.4,
+    shadowOffset: { width: 8, height: 8 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 25,
+  },
+  coverArtGlow: {
+    position: "absolute",
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 24,
+    borderWidth: 3,
+    opacity: 0.8,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 25,
+    elevation: 20,
   },
   coverArt: {
     width: "100%",
     height: "100%",
-    borderRadius: 16,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    backgroundColor: "#000000ff",
+    borderWidth: 3,
     overflow: "hidden",
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
-    elevation: 12,
+    shadowOffset: { width: 6, height: 6 },
+    shadowOpacity: 0.7,
+    shadowRadius: 15,
+    elevation: 25,
+    position: "relative",
+  },
+  coverArtGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 17,
+  },
+  coverArtTopHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "50%",
+    borderTopLeftRadius: 17,
+    borderTopRightRadius: 17,
+    zIndex: 1,
+  },
+  coverArtBottomShadow: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "50%",
+    borderBottomLeftRadius: 17,
+    borderBottomRightRadius: 17,
+    zIndex: 1,
+  },
+  coverArtInnerBorder: {
+    position: "absolute",
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    zIndex: 2,
+  },
+  coverSymbolContainer: {
+    position: "relative",
+    zIndex: 3,
   },
   coverSymbol: {
     fontSize: 64,
     fontFamily: Fonts.bold,
-    color: "#fff",
+    color: "#000",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 3,
+    textShadowColor: "rgba(0, 0, 0, 0.4)",
+  },
+  coverSymbolShadow: {
+    fontSize: 64,
+    fontFamily: Fonts.bold,
+    position: "absolute",
+    top: 2,
+    left: 0,
   },
   coverNumber: {
     position: "absolute",
     bottom: 10,
     right: 12,
     fontSize: 14,
-    color: "#fff",
+    color: "rgba(0, 0, 0, 0.7)",
+    zIndex: 3,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    textShadowColor: "rgba(255, 255, 255, 0.5)",
   },
   coverGlossyOverlay: {
     position: "absolute",
@@ -476,14 +664,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 16,
-    // backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.25)",
-    shadowColor: "rgba(255, 255, 255, 0.3)",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
+    borderRadius: 17,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderTopWidth: 2,
+    borderTopColor: "rgba(255, 255, 255, 0.4)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.4)",
+    zIndex: 2,
   },
   trackTitle: {
     fontSize: 24,

@@ -1,11 +1,11 @@
 "use client"
 import MiniPlayer from "@/components/MiniPlayer"
-import { useAppContext } from "@/context/AppContext"
 import { Ionicons } from "@expo/vector-icons"
+import { ResizeMode, Video } from "expo-av"
 import { Image } from "expo-image"
-import { usePathname, useRouter } from "expo-router"
+import { useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Dimensions, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { Fonts } from "../constants/Fonts"
 
 type Section = "home" | "library" | "discover" | "profile"
@@ -14,30 +14,29 @@ interface Book {
   id: string
   title: string
   cover: any
-  route: string
 }
 
 const BOOKS: Book[] = [
-  { id: "1", title: "Cover Case", cover: require("../assets/images/cover case.jpg"), route: "/book-details/1" },
-  { id: "2", title: "Chalachitra Sidhandangal", cover: require("../assets/images/cover  chalachitra sidhandangal-3.jpg"), route: "/book-details/2" },
-  { id: "3", title: "Hasthalikhitham", cover: require("../assets/images/Hasthalikhitham.jpg"), route: "/book-details/3" },
-  { id: "4", title: "Kumaranasan Vijnankosham", cover: require("../assets/images/Kumaranasan Vijnankosham_FINAL COVER.jpg"), route: "/book-details/4" },
-  { id: "5", title: "Nirmithabudhi", cover: require("../assets/images/Nirmithabudhi.jpg"), route: "/book-details/5" },
-  { id: "6", title: "Parinamam", cover: require("../assets/images/parinamam.jpg"), route: "/book-details/6" },
-  { id: "7", title: "Samoohasasthram", cover: require("../assets/images/Samoohasasthram.jpg"), route: "/book-details/7" },
-  { id: "8", title: "Vaikom", cover: require("../assets/images/vaikom cover-1.jpg"), route: "/book-details/8" },
-  { id: "9", title: "Jyothisastram", cover: require("../assets/images/jyothisastram.jpg"), route: "/book-details/9" },
+  { id: "1", title: "Cover Case", cover: require("../assets/images/cover case.jpg") },
+  { id: "2", title: "Chalachitra Sidhandangal", cover: require("../assets/images/cover  chalachitra sidhandangal-3.jpg") },
+  { id: "3", title: "Hasthalikhitham", cover: require("../assets/images/Hasthalikhitham.jpg") },
+  { id: "4", title: "Kumaranasan Vijnankosham", cover: require("../assets/images/Kumaranasan Vijnankosham_FINAL COVER.jpg") },
+  { id: "5", title: "Nirmithabudhi", cover: require("../assets/images/Nirmithabudhi.jpg") },
+  { id: "6", title: "Parinamam", cover: require("../assets/images/parinamam.jpg") },
+  { id: "7", title: "Samoohasasthram", cover: require("../assets/images/Samoohasasthram.jpg") },
+  { id: "8", title: "Vaikom", cover: require("../assets/images/vaikom cover-1.jpg") },
+  { id: "9", title: "Jyothisastram", cover: require("../assets/images/jyothisastram.jpg") },
 ]
 
 export default function AudioBookApp() {
   const [activeSection, setActiveSection] = useState<Section>("home")
   const router = useRouter()
-  const pathname = usePathname()
-  const { isPlaying, currentElement, sound } = useAppContext()
   
   const SCREEN_WIDTH = Dimensions.get("window").width
   const [currentSlide, setCurrentSlide] = useState(0)
   const sliderRef = useRef<ScrollView>(null)
+  const [showVideoPreview, setShowVideoPreview] = useState(false)
+  const previewVideoRef = useRef<Video>(null)
 
   // Auto-scroll carousel
   useEffect(() => {
@@ -48,7 +47,21 @@ export default function AudioBookApp() {
     }, 4000) // change every 4 seconds
 
     return () => clearInterval(interval)
-  }, [currentSlide, BOOKS.length])
+  }, [currentSlide, SCREEN_WIDTH])
+
+  // Handle book navigation - Cover Case goes to periodic-table, others go to book-details
+  const handleBookPress = (bookId: string) => {
+    if (bookId === "1") {
+      // Cover Case - navigate to periodic-table
+      router.push("/periodic-table")
+    } else {
+      // Other books - navigate to book-details
+      // router.push({
+      //   pathname: "/book-details/[id]",
+      //   params: { id: bookId }
+      // })
+    }
+  }
 
 
   const renderHomeSection = () => (
@@ -61,15 +74,15 @@ export default function AudioBookApp() {
               <Text style={styles.heroTitle}>AudioBook Hub</Text>
               <Text style={styles.heroSubtitle}>Discover amazing audio content</Text> */}
               <Text style={styles.welcomeText}>സ്വാഗതം</Text>
-              <Text style={styles.heroTitle}>ആഡിയോബുക്ക് ഹബ്</Text>
+              <Text style={styles.heroTitle}>ഓഡിയോ ബുക്ക്</Text>
               <Text style={styles.heroSubtitle}>അദ്ഭുതകരമായ ഓഡിയോ ഉള്ളടക്കം കണ്ടെത്തൂ</Text>
             </View>
 
             {/* QR Code Button */}
-            <TouchableOpacity style={styles.qrButton} onPress={() => router.push("/qr-code")}>
+            {/* <TouchableOpacity style={styles.qrButton} onPress={() => router.push("/qr-code")}>
               <Ionicons name="qr-code" size={20} color="#fff" />
               <Text style={styles.qrButtonText}>Share via QR</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         </View>
 
@@ -113,9 +126,22 @@ export default function AudioBookApp() {
               <TouchableOpacity 
                 key={i} 
                 style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}
-                onPress={() => router.push(book.route)}
+                // onPress={() => handleBookPress(book.id)}
               >
-                <Image source={book.cover} style={styles.sliderImage} contentFit="cover" />
+                <View style={styles.imageContainer}>
+                  <Image source={book.cover} style={styles.sliderImage} contentFit="contain" />
+                  {/* {book.id !== "1" && (
+                    <View style={styles.ribbonContainer}>
+                      <View style={styles.ribbonShadow} />
+                      <View style={styles.ribbonBody}>
+                        <View style={styles.ribbonTop} />
+                        <View style={styles.ribbonBottom} />
+                        <Text style={styles.ribbonText}>COMING SOON</Text>
+                        <View style={styles.ribbonTail} />
+                      </View>
+                    </View>
+                  )} */}
+                </View>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -135,18 +161,53 @@ export default function AudioBookApp() {
         <Text style={styles.sectionTitle}>Featured Content</Text>
 
         <View style={styles.cardGrid}>
+          {/* Video Card - sarva_2.mp4 */}
+          <TouchableOpacity 
+            style={styles.featuredCardTeal}
+            onPress={() => setShowVideoPreview(true)}
+          >
+            <View style={styles.cardIconTop}>
+              <View style={styles.featuredVideoContainer}>
+                <Video
+                  source={require("../assets/images/sarva_2.mp4")}
+                  style={styles.featuredVideo}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={false}
+                  isLooping={false}
+                  useNativeControls={false}
+                />
+                <View style={styles.videoPlayOverlay}>
+                  <Ionicons name="play-circle" size={48} color="#fff" />
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+
           {BOOKS.map((book) => (
             <TouchableOpacity 
               key={book.id}
               style={styles.featuredCardTeal} 
-              onPress={() => router.push(book.route)}
+              onPress={() => handleBookPress(book.id)}
             >
               <View style={styles.cardIconTop}>
-                <Image
-                  source={book.cover}
-                  style={{ width: 220, height: 220 }}
-                  resizeMode="contain"
-                />
+                <View style={styles.featuredImageContainer}>
+                  <Image
+                    source={book.cover}
+                    style={{ width: 220, height: 220 }}
+                    resizeMode="contain"
+                  />
+                  {book.id !== "1" && (
+                    <View style={styles.ribbonContainerSmall}>
+                      <View style={styles.ribbonShadowSmall} />
+                      <View style={styles.ribbonBodySmall}>
+                        <View style={styles.ribbonTopSmall} />
+                        <View style={styles.ribbonBottomSmall} />
+                        <Text style={styles.ribbonTextSmall}>COMING SOON</Text>
+                        <View style={styles.ribbonTailSmall} />
+                      </View>
+                    </View>
+                  )}
+                </View>
               </View>
             </TouchableOpacity>
           ))}
@@ -197,7 +258,43 @@ export default function AudioBookApp() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>{renderContent()}</View>
-  {/* Mini Player */}
+      
+      {/* Video Preview Modal */}
+      <Modal
+        visible={showVideoPreview}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowVideoPreview(false)
+          previewVideoRef.current?.pauseAsync()
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => {
+                setShowVideoPreview(false)
+                previewVideoRef.current?.pauseAsync()
+              }}
+            >
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            
+            <Video
+              ref={previewVideoRef}
+              source={require("../assets/images/sarva_2.mp4")}
+              style={styles.previewVideo}
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay={true}
+              isLooping={false}
+              useNativeControls={true}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mini Player */}
       <MiniPlayer />
 
       <View style={styles.bottomNav}>
@@ -307,9 +404,193 @@ const styles = StyleSheet.create({
     height: 500,
     backgroundColor: "#000",
   },
+  imageContainer: {
+    position: "relative",
+    width: "100%",
+    height: 240,
+  },
   sliderImage: {
     width: Dimensions.get("window").width,
     height: 240,
+  },
+  ribbonContainer: {
+    position: "absolute",
+    top: 10,
+    right: -20,
+    width: 200,
+    height: 40,
+    transform: [{ rotate: "45deg" }],
+    zIndex: 10,
+    overflow: "visible",
+  },
+  ribbonShadow: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    width: 200,
+    height: 45,
+    backgroundColor: "rgba(128, 128, 128, 0.4)",
+    borderRadius: 1,
+  },
+  ribbonBody: {
+    position: "relative",
+    width: 200,
+    height: 45,
+    backgroundColor: "#DC143C",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "visible",
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  ribbonTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "55%",
+    backgroundColor: "#FF1744",
+  },
+  ribbonBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "45%",
+    backgroundColor: "#B71C1C",
+  },
+  ribbonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: Fonts.bold,
+    textTransform: "uppercase",
+    letterSpacing: 2.5,
+    zIndex: 3,
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  ribbonTail: {
+    position: "absolute",
+    right: -15,
+    top: "50%",
+    width: 0,
+    height: 0,
+    borderTopWidth: 10,
+    borderTopColor: "transparent",
+    borderBottomWidth: 10,
+    borderBottomColor: "transparent",
+    borderRightWidth: 15,
+    borderRightColor: "#B71C1C",
+    transform: [{ translateY: -10 }],
+    zIndex: 1,
+  },
+  featuredImageContainer: {
+    position: "relative",
+    width: 220,
+    height: 220,
+  },
+  featuredVideoContainer: {
+    position: "relative",
+    width: 220,
+    height: 220,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#000",
+  },
+  featuredVideo: {
+    width: "100%",
+    height: "100%",
+  },
+  videoPlayOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  ribbonContainerSmall: {
+    position: "absolute",
+    top: 25,
+    left: 0,
+    width: 100,
+    height: 25,
+    transform: [{ rotate: "-30deg" }],
+    zIndex: 10,
+    overflow: "visible",
+  },
+  ribbonShadowSmall: {
+    position: "absolute",
+    top: 5,
+    left: 5,
+    width: 60,
+    height: 28,
+    // backgroundColor: "rgba(128, 128, 128, 0.4)",
+    borderRadius: 1,
+  },
+  ribbonBodySmall: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    width: 110,
+    height: 25,
+    backgroundColor: "#DC143C",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "visible",
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  ribbonTopSmall: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "45%",
+    backgroundColor: "#FF1744",
+  },
+  ribbonBottomSmall: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "45%",
+    backgroundColor: "#B71C1C",
+  },
+  ribbonTextSmall: {
+    color: "#fff",
+    fontSize: 9,
+    fontFamily: Fonts.bold,
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    zIndex: 3,
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  ribbonTailSmall: {
+    position: "absolute",
+    right: -12,
+    top: "40%",
+    width: 0,
+    height: 0,
+    borderTopWidth: 8,
+    borderTopColor: "transparent",
+    borderBottomWidth: 8,
+    borderBottomColor: "transparent",
+    borderRightWidth: 12,
+    borderRightColor: "#B71C1C",
+    transform: [{ translateY: -8 }],
+    zIndex: 1,
   },
   dots: {
     flexDirection: "row",
@@ -409,6 +690,37 @@ const styles = StyleSheet.create({
   qrButtonText: {
     color: "#fff",
     fontSize: 14,
-    fontFamily: Fonts.semibold,
+    fontFamily: Fonts.semiBold,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "90%",
+    maxWidth: 600,
+    aspectRatio: 16 / 9,
+    backgroundColor: "#000",
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  previewVideo: {
+    width: "100%",
+    height: "100%",
   },
 })

@@ -21,13 +21,17 @@ import { type Element, useAppContext } from "../../context/AppContext"
 
 const { width, height } = Dimensions.get("window")
 const isLandscape = width > height
-const windowWidth = Dimensions.get("window").width
 
 // More aggressive sizing for landscape to maximize table area
-const ELEMENT_SIZE = isLandscape
-  ? Math.min(windowWidth / 14, 40) // Much smaller in landscape
-  : Math.min(windowWidth / 8, 60) // Normal in portrait
-const GAP_SIZE = isLandscape ? 1.5 : 2 // Tighter spacing in landscape
+const getElementSize = (isLandscape: boolean, screenWidth: number) => {
+  return isLandscape
+    ? Math.min(screenWidth / 18, 35) // Smaller in landscape for better fit
+    : Math.min(screenWidth / 8, 60) // Normal in portrait
+}
+
+const getGapSize = (isLandscape: boolean) => {
+  return isLandscape ? 1 : 2 // Tighter spacing in landscape
+}
 
 export default function TableView() {
   const router = useRouter()
@@ -37,6 +41,11 @@ export default function TableView() {
   const [showSearch, setShowSearch] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [orientation, setOrientation] = useState(isLandscape)
+  const [dimensions, setDimensions] = useState({ width, height })
+  
+  // Calculate element size based on current orientation
+  const ELEMENT_SIZE = getElementSize(orientation, dimensions.width)
+  const GAP_SIZE = getGapSize(orientation)
 
   // For scroll indicators
   const legendScrollViewRef = useRef<ScrollView>(null)
@@ -62,6 +71,7 @@ export default function TableView() {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
       const newIsLandscape = window.width > window.height
       setOrientation(newIsLandscape)
+      setDimensions({ width: window.width, height: window.height })
     })
 
     return () => subscription?.remove()
@@ -120,6 +130,46 @@ export default function TableView() {
 
   const maxRow = Math.max(...elements.map((e) => e.ypos))
   const maxCol = Math.max(...elements.map((e) => e.xpos))
+  
+  // Calculate center position for Introduction and Conclusion
+  const centerX = Math.ceil(maxCol / 2)
+  
+  // Create special elements for Introduction and Conclusion
+  // Using special markers for local audio files that will be handled in playElement
+  const introductionElement: Element = {
+    name: "Introduction",
+    symbol: "Intr.",
+    number: 0,
+    category: "special",
+    atomic_mass: 0,
+    electron_configuration: "",
+    discovered_by: "",
+    phase: "",
+    density: 0,
+    summary: "",
+    xpos: centerX - 2.8,
+    ypos: 0.5,
+    audio_url: "local://introduction", // Special marker for local file
+  }
+  
+  const conclusionElement: Element = {
+    name: "Conclusion",
+    symbol: "Conc.",
+    number: -1,
+    category: "special",
+    atomic_mass: 0,
+    electron_configuration: "",
+    discovered_by: "",
+    phase: "",
+    density: 0,
+    summary: "",
+    xpos: centerX + 0,
+    ypos: 0.5,
+    audio_url: "local://conclusion", // Special marker for local file
+  }
+  
+  // Combine special elements with regular elements
+  const allElements = [introductionElement, conclusionElement, ...elements]
 
   const handleSearch = (text: string) => {
     setSearchQuery(text)
@@ -130,6 +180,13 @@ export default function TableView() {
     : selectedCategory
       ? elements.filter((element) => element.category === selectedCategory)
       : elements
+  
+  // Always include special elements (Introduction and Conclusion) in the display
+  const displayElements = searchQuery
+    ? [introductionElement, conclusionElement, ...filteredElements]
+    : selectedCategory 
+      ? [introductionElement, conclusionElement, ...filteredElements]
+      : allElements
 
   const handleScroll = (event: any) => {
     const position = event.nativeEvent.contentOffset.x
@@ -180,6 +237,7 @@ export default function TableView() {
 
   const getNeonColor = (category: string, isFavorite: boolean): string => {
     if (isFavorite) return "#FFD700" // neon gold for favorites
+    if (category === "special") return "#F500E2" // pink for special elements
     switch (category) {
       case "alkali metal":
         return "#39FF14" // neon green
@@ -218,6 +276,7 @@ export default function TableView() {
     const isPlaying = currentElement?.number === element.number
     const neonColor = getNeonColor(element.category, isFavorite)
     const isSelected = selectedElementNumber === element.number
+    const isSpecial = element.category === "special"
 
     return (
       <TouchableOpacity
@@ -234,15 +293,25 @@ export default function TableView() {
           setSelectedElementNumber(element.number)
           playElement(element)
         }}
-        onLongPress={() => toggleFavorite(element.number)}
+        onLongPress={() => {
+          if (!isSpecial) {
+            toggleFavorite(element.number)
+          }
+        }}
       >
-        <Text style={[styles.atomicNumber, {  fontFamily: Fonts.regular,fontSize: ELEMENT_SIZE * 0.2, color: isSelected ? "rgba(0,0,0,0.7)" : neonColor }]}>{element.number}</Text>
-        <Text style={[styles.symbol, {  fontFamily: Fonts.regular,fontSize: ELEMENT_SIZE * 0.4, color: isSelected ? "#000" : neonColor }]}>{element.symbol}</Text>
-        <Text style={[styles.elementName, {  fontFamily: Fonts.regular,fontSize: ELEMENT_SIZE * 0.18, color: isSelected ? "rgba(0,0,0,0.7)" : neonColor }]} numberOfLines={1}>
-          {element.name.length > (orientation ? 3 : 5)
-            ? element.name.substring(0, orientation ? 2 : 4) + "."
-            : element.name}
+        {!isSpecial && (
+          <Text style={[styles.atomicNumber, {  fontFamily: Fonts.regular,fontSize: ELEMENT_SIZE * 0.2, color: isSelected ? "rgba(0,0,0,0.7)" : neonColor }]}>{element.number}</Text>
+        )}
+        <Text style={[styles.symbol, {  fontFamily: Fonts.regular,fontSize: isSpecial ? ELEMENT_SIZE * 0.3 : ELEMENT_SIZE * 0.4, color: isSelected ? "#000" : neonColor }]} numberOfLines={1}>
+          {isSpecial ? element.name : element.symbol}
         </Text>
+        {!isSpecial && (
+          <Text style={[styles.elementName, {  fontFamily: Fonts.regular,fontSize: ELEMENT_SIZE * 0.15, color: isSelected ? "rgba(0,0,0,0.7)" : neonColor }]} numberOfLines={1}>
+            {element.name.length > (orientation ? 3 : 5)
+              ? element.name.substring(0, orientation ? 2 : 4) + "."
+              : element.name}
+          </Text>
+        )}
       </TouchableOpacity>
     )
   }
@@ -373,46 +442,36 @@ export default function TableView() {
                 styles.periodicTable,
                 {
                   width: maxCol * (ELEMENT_SIZE + GAP_SIZE),
-                  height: maxRow * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 10 : 10),
+                  height: (maxRow + 1.5) * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 20 : 40),
                 },
               ]}
               {...panResponder.panHandlers}
             >
-              {elements.map((element) =>
-                selectedCategory ? (
-                  element.category === selectedCategory && (
-                    <View
-                      key={element.number}
-                      style={[
-                        styles.elementWrapper,
-                        {
-                          left: (element.xpos - 1) * (ELEMENT_SIZE + GAP_SIZE),
-                          top: (element.ypos - 1) * (ELEMENT_SIZE + GAP_SIZE),
-                          width: ELEMENT_SIZE,
-                          height: ELEMENT_SIZE,
-                        },
-                      ]}
-                    >
-                      {renderElement(element)}
-                    </View>
-                  )
-                ) : (
+              {displayElements.map((element) => {
+                const leftPos = (element.xpos - 1) * (ELEMENT_SIZE + GAP_SIZE)
+                const topPos = (element.ypos - 1) * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 20 : 35)
+                const isSpecial = element.category === "special"
+                // Make special elements wider (2x width)
+                const elementWidth = isSpecial ? ELEMENT_SIZE * 2.5 : ELEMENT_SIZE
+                const elementHeight = isSpecial ? ELEMENT_SIZE * 1.2 : ELEMENT_SIZE
+                
+                return (
                   <View
-                    key={element.number}
+                    key={`${element.number}-${element.name}`}
                     style={[
                       styles.elementWrapper,
                       {
-                        left: (element.xpos - 1) * (ELEMENT_SIZE + GAP_SIZE),
-                        top: (element.ypos - 1) * (ELEMENT_SIZE + GAP_SIZE),
-                        width: ELEMENT_SIZE,
-                        height: ELEMENT_SIZE,
+                        left: leftPos,
+                        top: topPos,
+                        width: elementWidth,
+                        height: elementHeight,
                       },
                     ]}
                   >
                     {renderElement(element)}
                   </View>
-                ),
-              )}
+                )
+              })}
             </Animated.View>
           </ScrollView>
         </ScrollView>
@@ -644,18 +703,20 @@ const styles = StyleSheet.create({
   },
   tableWrapperLandscape: {
     flex: 1,
+    minHeight: 0, // Important for flex layout in landscape
   },
   scrollView: {
     flex: 1,
   },
   tableContainer: {
     padding: 4,
-    paddingTop: 15,
+    paddingTop: 40, // Add space for Introduction and Conclusion at top
   },
   tableContainerLandscape: {
-    padding: 2,
-    paddingTop: 5,
-    paddingLeft: 20,
+    padding: 1,
+    paddingTop: 25,
+    paddingLeft: 2,
+    paddingRight: 2,
   },
   periodicTable: {
     position: "relative",
@@ -761,7 +822,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 40,
+    height: 50,
     zIndex: 1000,
+    backgroundColor: "#1a1a2e",
   },
 })

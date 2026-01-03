@@ -1,13 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { Video } from "expo-av"
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av"
 import { useRouter } from "expo-router"
-import { useEffect, useRef } from "react"
-import { Animated } from "react-native"
+import { useEffect, useRef, useState } from "react"
+import { Animated, StyleSheet } from "react-native"
 
 export default function IntroScreen() {
   const router = useRouter()
   const videoRef = useRef<Video>(null)
   const fadeAnim = useRef(new Animated.Value(1)).current
+  const [hasCheckedLaunch, setHasCheckedLaunch] = useState(false)
 
   useEffect(() => {
     const checkFirstLaunch = async () => {
@@ -15,18 +16,8 @@ export default function IntroScreen() {
         const hasLaunched = await AsyncStorage.getItem("hasLaunched")
         
         if (hasLaunched !== "true") {
-          // First launch - show intro
-          setTimeout(() => {
-            // After video plays (adjust timing as needed)
-            Animated.timing(fadeAnim, {
-              toValue: 0,
-              duration: 800,
-              useNativeDriver: true,
-            }).start(() => {
-              AsyncStorage.setItem("hasLaunched", "true")
-              router.replace("/home")
-            })
-          }, 5000) // Show intro for 5 seconds
+          // First launch - show intro video
+          setHasCheckedLaunch(true)
         } else {
           // Already launched - go directly to home
           router.replace("/home")
@@ -38,7 +29,35 @@ export default function IntroScreen() {
     }
 
     checkFirstLaunch()
-  }, [])
+  }, [router])
+
+  const handlePlaybackStatusUpdate = async (status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return
+
+    // Check if video has finished playing
+    if (status.didJustFinish) {
+      try {
+        // Fade out animation
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }).start(async () => {
+          // Mark as launched and navigate to home
+          await AsyncStorage.setItem("hasLaunched", "true")
+          router.replace("/home")
+        })
+      } catch (error) {
+        console.error("Error handling video completion:", error)
+        router.replace("/home")
+      }
+    }
+  }
+
+  // Don't render video if we're redirecting
+  if (!hasCheckedLaunch) {
+    return null
+  }
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
@@ -52,7 +71,8 @@ export default function IntroScreen() {
         isLooping={false}
         style={styles.video}
         shouldPlay={true}
-        resizeMode="cover"
+        resizeMode={ResizeMode.COVER}
+        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
       />
     </Animated.View>
   )

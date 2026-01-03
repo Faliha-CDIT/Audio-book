@@ -8,17 +8,34 @@ import { AppProvider } from "../context/AppContext"
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync()
 
-const linking = {
+// const linking = {
+//   prefixes: ['audiobook://', 'https://audiobook.app'],
+//   config: {
+//     screens: {
+//       home: 'home',
+//       'periodic-table': 'periodic-table',
+//       'qr-code': 'qr-code',
+//       'book-details/[id]': 'book-details/:id',
+//       index: '',
+//     },
+//   },
+// }
+
+export const linking = {
   prefixes: ['audiobook://', 'https://audiobook.app'],
   config: {
     screens: {
+      index: '',
       home: 'home',
       'periodic-table': 'periodic-table',
       'qr-code': 'qr-code',
-      index: '',
+      'book-details': {
+        path: 'book-details/:id',
+      },
     },
   },
 }
+
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
