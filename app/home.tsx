@@ -55,11 +55,12 @@ export default function AudioBookApp() {
       // Cover Case - navigate to periodic-table
       router.push("/periodic-table")
     } else {
-      // Other books - navigate to book-details
-      // router.push({
-      //   pathname: "/book-details/[id]",
-      //   params: { id: bookId }
-      // })
+      // Other books - navigate to book-details index page with id parameter
+      // router.push(`/book-details/index?id=${bookId}`)
+      // router.push(`/book-details/${bookId}`)
+
+      // console.log(bookId, `/book-details/${bookId}`);
+      
     }
   }
 
@@ -126,7 +127,7 @@ export default function AudioBookApp() {
               <TouchableOpacity 
                 key={i} 
                 style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}
-                // onPress={() => handleBookPress(book.id)}
+                onPress={() => handleBookPress(book.id)}
               >
                 <View style={styles.imageContainer}>
                   <Image source={book.cover} style={styles.sliderImage} contentFit="contain" />

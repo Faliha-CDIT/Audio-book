@@ -65,6 +65,22 @@ export default function TableView() {
   const translateY = useRef(new Animated.Value(0)).current
 
   const [panPosition, setPanPosition] = useState({ x: 0, y: 0 })
+  const [currentScale, setCurrentScale] = useState(1)
+
+  // Track pinch zoom state
+  const pinchState = useRef({
+    initialDistance: 0,
+    initialScale: 1,
+    isZooming: false,
+  }).current
+
+  const getDistance = (touches: readonly any[]) => {
+    if (touches.length < 2) return 0
+    const [a, b] = touches
+    const dx = a.pageX - b.pageX
+    const dy = a.pageY - b.pageY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
 
   // Listen for orientation changes
   useEffect(() => {
@@ -80,51 +96,74 @@ export default function TableView() {
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        translateX.setOffset(panPosition.x)
-        translateY.setOffset(panPosition.y)
-        translateX.setValue(0)
-        translateY.setValue(0)
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const touches = evt.nativeEvent.touches as readonly any[]
+
+        if (touches.length >= 2) {
+          // Start pinch zoom
+          pinchState.initialDistance = getDistance(touches)
+          pinchState.initialScale = currentScale
+          pinchState.isZooming = true
+        } else {
+          // Start pan
+          pinchState.isZooming = false
+          translateX.setOffset(panPosition.x)
+          translateY.setOffset(panPosition.y)
+          translateX.setValue(0)
+          translateY.setValue(0)
+        }
       },
-      onPanResponderMove: Animated.event([null, { dx: translateX, dy: translateY }], { useNativeDriver: false }),
+      onPanResponderMove: (evt, gestureState) => {
+        const touches = evt.nativeEvent.touches as readonly any[]
+
+        if (touches.length >= 2) {
+          // Handle pinch zoom
+          const distance = getDistance(touches)
+          if (!pinchState.initialDistance) {
+            pinchState.initialDistance = distance
+          }
+
+          const scaleFactor = distance / pinchState.initialDistance
+          let newScale = pinchState.initialScale * scaleFactor
+
+          // Clamp zoom level
+          newScale = Math.max(1, Math.min(3, newScale))
+
+          scale.setValue(newScale)
+          setCurrentScale(newScale)
+        } else if (!pinchState.isZooming) {
+          // Handle pan
+          translateX.setValue(gestureState.dx)
+          translateY.setValue(gestureState.dy)
+        }
+      },
       onPanResponderRelease: () => {
+        pinchState.isZooming = false
         translateX.flattenOffset()
         translateY.flattenOffset()
-
-        const updatePosition = () => {
-          translateX.removeAllListeners()
-          translateY.removeAllListeners()
-
-          translateX.addListener(({ value }) => {
-            setPanPosition((prev) => ({ ...prev, x: value }))
-          })
-
-          translateY.addListener(({ value }) => {
-            setPanPosition((prev) => ({ ...prev, y: value }))
-          })
-        }
-
-        updatePosition()
+      },
+      onPanResponderTerminationRequest: () => true,
+      onPanResponderTerminate: () => {
+        pinchState.isZooming = false
+        translateX.flattenOffset()
+        translateY.flattenOffset()
       },
     }),
   ).current
 
   useEffect(() => {
-    const setupListeners = () => {
-      translateX.addListener(({ value }) => {
-        setPanPosition((prev) => ({ ...prev, x: value }))
-      })
+    const xListenerId = translateX.addListener(({ value }) => {
+      setPanPosition((prev) => ({ ...prev, x: value }))
+    })
 
-      translateY.addListener(({ value }) => {
-        setPanPosition((prev) => ({ ...prev, y: value }))
-      })
-    }
-
-    setupListeners()
+    const yListenerId = translateY.addListener(({ value }) => {
+      setPanPosition((prev) => ({ ...prev, y: value }))
+    })
 
     return () => {
-      translateX.removeAllListeners()
-      translateY.removeAllListeners()
+      translateX.removeListener(xListenerId)
+      translateY.removeListener(yListenerId)
     }
   }, [translateX, translateY])
 
@@ -432,17 +471,14 @@ export default function TableView() {
           showsHorizontalScrollIndicator={true}
           showsVerticalScrollIndicator={true}
         >
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.periodicTable}
-            showsVerticalScrollIndicator={true}
-          >
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.periodicTable} showsVerticalScrollIndicator>
             <Animated.View
               style={[
                 styles.periodicTable,
                 {
                   width: maxCol * (ELEMENT_SIZE + GAP_SIZE),
                   height: (maxRow + 1.5) * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 20 : 40),
+                  transform: [{ scale }, { translateX }, { translateY }],
                 },
               ]}
               {...panResponder.panHandlers}
@@ -451,10 +487,9 @@ export default function TableView() {
                 const leftPos = (element.xpos - 1) * (ELEMENT_SIZE + GAP_SIZE)
                 const topPos = (element.ypos - 1) * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 20 : 35)
                 const isSpecial = element.category === "special"
-                // Make special elements wider (2x width)
                 const elementWidth = isSpecial ? ELEMENT_SIZE * 2.5 : ELEMENT_SIZE
                 const elementHeight = isSpecial ? ELEMENT_SIZE * 1.2 : ELEMENT_SIZE
-                
+
                 return (
                   <View
                     key={`${element.number}-${element.name}`}
@@ -819,7 +854,7 @@ const styles = StyleSheet.create({
   },
   miniPlayerLandscape: {
     position: "absolute",
-    bottom: 0,
+    bottom: 12,
     left: 0,
     right: 0,
     height: 50,
