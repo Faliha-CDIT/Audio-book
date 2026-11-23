@@ -1,7 +1,8 @@
 "use client"
 
-import { Audio } from "expo-av"
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio"
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { AppState } from "react-native"
 
 export interface Chapter {
   id: string
@@ -27,7 +28,7 @@ interface BookContextType {
   isPlaying: boolean
   playbackPosition: number
   playbackDuration: number
-  sound: Audio.Sound | null
+  sound: AudioPlayer | null
   isLoading: boolean
 
   // Actions
@@ -39,157 +40,152 @@ interface BookContextType {
 
 const BookContext = createContext<BookContextType | undefined>(undefined)
 
+async function configureAudioSession() {
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+    })
+  } catch (err) {
+    console.warn("[Audio] setAudioModeAsync failed:", err)
+  }
+}
+
 export function BookProvider({ children }: { children: ReactNode }) {
   const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null)
   const [currentBook, setCurrentBook] = useState<Book | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackPosition, setPlaybackPosition] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(0)
-  const [sound, setSound] = useState<Audio.Sound | null>(null)
+  const [sound, setSound] = useState<AudioPlayer | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const soundRef = useRef<AudioPlayer | null>(null)
 
   useEffect(() => {
-    // Configure audio session
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
+    soundRef.current = sound
+  }, [sound])
+
+  useEffect(() => {
+    configureAudioSession()
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        configureAudioSession()
+      }
     })
 
     return () => {
-      // Cleanup sound when component unmounts
-      if (sound) {
-        sound.unloadAsync()
-      }
+      subscription.remove()
+      soundRef.current?.remove()
     }
   }, [])
 
-  const stopAudio = async () => {
-    if (sound) {
+  const stopAudio = useCallback(async () => {
+    const player = soundRef.current
+    if (player) {
       try {
-        await sound.stopAsync()
-        await sound.unloadAsync()
-        setSound(null)
-      } catch (error) {
-        console.error("Error stopping audio:", error)
+        player.pause()
+        player.seekTo(0)
+        player.remove()
+      } catch (err) {
+        console.warn("[Audio] Error stopping audio:", err)
       }
+      soundRef.current = null
+      setSound(null)
     }
     setIsPlaying(false)
     setPlaybackPosition(0)
     setPlaybackDuration(0)
     setCurrentChapter(null)
     setCurrentBook(null)
-  }
+  }, [])
 
-  const playChapter = async (chapter: Chapter, book: Book) => {
+  const playChapter = useCallback(async (chapter: Chapter, book: Book) => {
+    // Tear down previous player first
+    const prevPlayer = soundRef.current
+    if (prevPlayer) {
+      try {
+        prevPlayer.pause()
+        prevPlayer.remove()
+      } catch (_) {}
+      soundRef.current = null
+      setSound(null)
+    }
+
+    setCurrentChapter(chapter)
+    setCurrentBook(book)
+
+    if (!chapter.audio_url) {
+      // Demo mode
+      setIsPlaying(true)
+      setPlaybackDuration(chapter.duration || 180000)
+      setPlaybackPosition(0)
+      const interval = setInterval(() => {
+        setPlaybackPosition((prev) => {
+          const duration = chapter.duration || 180000
+          if (prev >= duration) {
+            clearInterval(interval)
+            setIsPlaying(false)
+            return duration
+          }
+          return prev + 1000
+        })
+      }, 1000)
+      return
+    }
+
+    setIsLoading(true)
     try {
-      setIsLoading(true)
+      const audioSource: any = { uri: chapter.audio_url }
 
-      // Stop current sound if playing
-      if (sound) {
-        await sound.unloadAsync()
-        setSound(null)
-      }
+      // Re-configure audio session before each play (Android OEM audio focus fix)
+      await configureAudioSession()
 
-      setCurrentChapter(chapter)
-      setCurrentBook(book)
+      const newPlayer = createAudioPlayer(audioSource, { updateInterval: 500 })
 
-      // Load and play audio if available
-      if (chapter.audio_url) {
-        try {
-          let audioSource
-
-          // Check if it's a local file marker
-          if (chapter.audio_url.startsWith("local://")) {
-            // Handle local audio files
-            const audioType = chapter.audio_url.replace("local://", "")
-            // You can add specific book audio files here
-            audioSource = { uri: chapter.audio_url }
-          } else {
-            // Remote URL or direct path
-            audioSource = { uri: chapter.audio_url }
-          }
-
-          const { sound: newSound } = await Audio.Sound.createAsync(audioSource, { shouldPlay: true })
-
-          setSound(newSound)
-
-          // Get audio status
-          const status = await newSound.getStatusAsync()
-          if (status.isLoaded) {
-            setPlaybackDuration(status.durationMillis || 0)
-            setIsPlaying(status.isPlaying || false)
-          }
-
-          // Set up playback status update
-          newSound.setOnPlaybackStatusUpdate((status) => {
-            if (status.isLoaded) {
-              setPlaybackPosition(status.positionMillis || 0)
-              setPlaybackDuration(status.durationMillis || 0)
-              setIsPlaying(status.isPlaying || false)
-
-              // Auto-stop when finished
-              if (status.didJustFinish) {
-                setIsPlaying(false)
-                setPlaybackPosition(0)
-              }
-            }
-          })
-        } catch (audioError) {
-          console.error("Error loading audio:", audioError)
-          // Fallback to demo mode
-          setIsPlaying(true)
-          setPlaybackDuration(chapter.duration || 180000) // Use chapter duration or default 3 minutes
+      newPlayer.addListener("playbackStatusUpdate", (status) => {
+        if (!status.isLoaded) return
+        setPlaybackPosition(Math.round((status.currentTime ?? 0) * 1000))
+        setPlaybackDuration(Math.round((status.duration ?? 0) * 1000))
+        setIsPlaying(status.playing ?? false)
+        if (status.didJustFinish) {
+          setIsPlaying(false)
           setPlaybackPosition(0)
         }
-      } else {
-        // Demo mode for chapters without audio
-        setIsPlaying(true)
-        setPlaybackDuration(chapter.duration || 180000)
-        setPlaybackPosition(0)
+      })
 
-        // Simulate playback progress
-        const interval = setInterval(() => {
-          setPlaybackPosition((prev) => {
-            const duration = chapter.duration || 180000
-            if (prev >= duration) {
-              clearInterval(interval)
-              setIsPlaying(false)
-              return duration
-            }
-            return prev + 1000
-          })
-        }, 1000)
-      }
-
-      setIsLoading(false)
-    } catch (error) {
-      console.error("Error playing chapter:", error)
+      newPlayer.play()
+      soundRef.current = newPlayer
+      setSound(newPlayer)
+      setIsPlaying(true)
+    } catch (audioError) {
+      console.error("[Audio] Failed to load chapter audio:", audioError)
+      setIsPlaying(true)
+      setPlaybackDuration(chapter.duration || 180000)
+      setPlaybackPosition(0)
+    } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const togglePlayback = async () => {
-    if (sound) {
+  const togglePlayback = useCallback(async () => {
+    const player = soundRef.current
+    if (player) {
       try {
-        const status = await sound.getStatusAsync()
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await sound.pauseAsync()
-          } else {
-            await sound.playAsync()
-          }
+        if (player.playing) {
+          player.pause()
+          setIsPlaying(false)
+        } else {
+          player.play()
+          setIsPlaying(true)
         }
-      } catch (error) {
-        console.error("Error toggling playback:", error)
+      } catch (err) {
+        console.warn("[Audio] togglePlayback error:", err)
       }
     } else {
-      // Fallback for demo mode
       setIsPlaying((prev) => !prev)
     }
-  }
+  }, [])
 
   const contextValue: BookContextType = {
     currentChapter,
@@ -215,4 +211,3 @@ export function useBookContext() {
   }
   return context
 }
-

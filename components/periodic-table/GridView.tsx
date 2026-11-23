@@ -7,6 +7,7 @@ import {
     Animated,
     FlatList,
     ScrollView,
+    type ScrollViewInstance,
     StyleSheet,
     Text,
     TextInput,
@@ -29,7 +30,7 @@ export default function GridView() {
   const isLandscape = width > height
 
   // For scroll indicators
-  const categoryScrollViewRef = useRef<ScrollView>(null)
+  const categoryScrollViewRef = useRef<ScrollViewInstance>(null)
   const [showLeftArrow, setShowLeftArrow] = useState(false)
   const [showRightArrow, setShowRightArrow] = useState(true)
   const [contentWidth, setContentWidth] = useState(0)

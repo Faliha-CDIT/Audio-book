@@ -8,7 +8,7 @@ import { Alert, Platform, Text, View } from 'react-native'
 import { AppProvider } from "../context/AppContext"
 import { BookProvider } from "../context/BookContext"
 
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import JailMonkey from 'jail-monkey'
 
 // Keep the splash screen visible while we fetch resources

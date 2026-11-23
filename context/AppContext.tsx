@@ -1,7 +1,8 @@
 "use client"
 
-import { Audio } from "expo-av"
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio"
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
+import { AppState, Platform } from "react-native"
 import { fetchElements } from "../services/api"
 
 export interface Element {
@@ -29,7 +30,7 @@ interface AppContextType {
   isPlaying: boolean
   playbackPosition: number
   playbackDuration: number
-  sound: Audio.Sound | null
+  sound: AudioPlayer | null
   isLoading: boolean
 
   // Actions
@@ -44,6 +45,22 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
+/**
+ * Configures the audio session for foreground + background playback.
+ * Called once on mount and again when the app returns to foreground
+ * (some Android OEMs reset audio focus when returning from background).
+ */
+async function configureAudioSession() {
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,       // iOS: play even on silent switch
+      shouldPlayInBackground: true,  // Keep audio active when app is backgrounded
+    })
+  } catch (err) {
+    console.warn("[Audio] setAudioModeAsync failed:", err)
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [elements, setElements] = useState<Element[]>([])
   const [favorites, setFavorites] = useState<number[]>([])
@@ -52,175 +69,201 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackPosition, setPlaybackPosition] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(0)
-  const [sound, setSound] = useState<Audio.Sound | null>(null)
+  const [sound, setSound] = useState<AudioPlayer | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Configure audio session
-    Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: false,
-    })
+  // Use a ref to always access the latest player inside async callbacks
+  // without stale closure issues.
+  const soundRef = useRef<AudioPlayer | null>(null)
 
-    // Load elements from API
+  useEffect(() => {
+    soundRef.current = sound
+  }, [sound])
+
+  // Initial setup
+  useEffect(() => {
+    configureAudioSession()
     loadElements()
 
-    return () => {
-      // Cleanup sound when component unmounts
-      if (sound) {
-        sound.unloadAsync()
+    // Re-configure audio focus on Android when the app comes back to foreground,
+    // because some OEMs (Xiaomi, OPPO, Samsung OneUI) release audio focus while
+    // the app is backgrounded, causing subsequent plays to be silent.
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        configureAudioSession()
       }
+    })
+
+    return () => {
+      subscription.remove()
+      // Clean up any active player
+      soundRef.current?.remove()
     }
   }, [])
 
   const loadElements = async () => {
-    try {
-      setIsLoading(true)
-      const elementsData = await fetchElements()
-      setElements(elementsData)
-    } catch (error) {
-      console.error("Error loading elements:", error)
-    } finally {
-      setIsLoading(false)
+    setIsLoading(true)
+    // Retry up to 3 times in case of transient network/certificate issues
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const elementsData = await fetchElements()
+        if (elementsData.length > 0) {
+          setElements(elementsData)
+          break
+        }
+      } catch (error) {
+        console.error(`[API] fetchElements attempt ${attempt + 1} failed:`, error)
+        if (attempt === 2) {
+          console.error("[API] All retries exhausted, elements not loaded")
+        }
+        // Wait 1s before retrying
+        await new Promise((r) => setTimeout(r, 1000))
+      }
     }
+    setIsLoading(false)
   }
 
   const toggleFavorite = (elementNumber: number) => {
     setFavorites((prev) =>
-      prev.includes(elementNumber) ? prev.filter((num) => num !== elementNumber) : [...prev, elementNumber],
+      prev.includes(elementNumber)
+        ? prev.filter((num) => num !== elementNumber)
+        : [...prev, elementNumber],
     )
   }
 
   const addToHistory = (elementNumber: number) => {
     setPlaybackHistory((prev) => {
       const filtered = prev.filter((num) => num !== elementNumber)
-      return [elementNumber, ...filtered].slice(0, 50) // Keep last 50
+      return [elementNumber, ...filtered].slice(0, 50)
     })
   }
 
-  const stopAudio = async () => {
-    if (sound) {
+  const stopAudio = useCallback(() => {
+    const player = soundRef.current
+    if (player) {
       try {
-        await sound.stopAsync()
-        await sound.unloadAsync()
-        setSound(null)
-      } catch (error) {
-        console.error("Error stopping audio:", error)
+        player.pause()
+        player.seekTo(0)
+        player.remove()
+      } catch (err) {
+        console.warn("[Audio] Error stopping audio:", err)
       }
+      soundRef.current = null
+      setSound(null)
     }
     setIsPlaying(false)
     setPlaybackPosition(0)
     setPlaybackDuration(0)
-  }
+  }, [])
 
-  const playElement = async (element: Element) => {
+  const playElement = useCallback(async (element: Element) => {
+    // --- 1. Tear down any currently active player FIRST ---
+    const prevPlayer = soundRef.current
+    if (prevPlayer) {
+      try {
+        prevPlayer.pause()
+        prevPlayer.remove()
+      } catch (_) {}
+      soundRef.current = null
+      setSound(null)
+    }
+
+    setCurrentElement(element)
+    addToHistory(element.number)
+
+    if (!element.audio_url) {
+      // ---- Demo mode (no audio URL) ----
+      setIsPlaying(true)
+      setPlaybackDuration(180000)
+      setPlaybackPosition(0)
+      const interval = setInterval(() => {
+        setPlaybackPosition((prev) => {
+          if (prev >= 180000) {
+            clearInterval(interval)
+            setIsPlaying(false)
+            return 180000
+          }
+          return prev + 1000
+        })
+      }, 1000)
+      return
+    }
+
+    // ---- Real audio ----
+    setIsLoading(true)
+
     try {
-      setIsLoading(true)
-
-      // Stop current sound if playing
-      if (sound) {
-        await sound.unloadAsync()
-        setSound(null)
-      }
-
-      setCurrentElement(element)
-      addToHistory(element.number)
-
-      // Load and play audio if available
-      if (element.audio_url) {
-        try {
-          let audioSource
-          
-          // Check if it's a local file marker
-          if (element.audio_url.startsWith("local://")) {
-            // Handle local audio files
-            const audioType = element.audio_url.replace("local://", "")
-            if (audioType === "introduction") {
-              audioSource = require("../assets/audio/MOOLAKAVIJNANAKOSHAM INTRODUCTION.mp3")
-            } else if (audioType === "conclusion") {
-              audioSource = require("../assets/audio/CONCLUSION.mp3")
-            } else {
-              audioSource = { uri: element.audio_url }
-            }
-          } else {
-            // Remote URL
-            audioSource = { uri: element.audio_url }
-          }
-          
-          const { sound: newSound } = await Audio.Sound.createAsync(audioSource, { shouldPlay: true })
-
-          setSound(newSound)
-
-          // Get audio status
-          const status = await newSound.getStatusAsync()
-          if (status.isLoaded) {
-            setPlaybackDuration(status.durationMillis || 0)
-            setIsPlaying(status.isPlaying || false)
-          }
-
-          // Set up playback status update
-          newSound.setOnPlaybackStatusUpdate((status) => {
-            if (status.isLoaded) {
-              setPlaybackPosition(status.positionMillis || 0)
-              setPlaybackDuration(status.durationMillis || 0)
-              setIsPlaying(status.isPlaying || false)
-            }
-          })
-        } catch (audioError) {
-          console.error("Error loading audio:", audioError)
-          // Fallback to demo mode
-          setIsPlaying(true)
-          setPlaybackDuration(180000) // 3 minutes demo
-          setPlaybackPosition(0)
+      // Resolve the audio source
+      let audioSource: any
+      if (element.audio_url.startsWith("local://")) {
+        const audioType = element.audio_url.replace("local://", "")
+        if (audioType === "introduction") {
+          audioSource = require("../assets/audio/MOOLAKAVIJNANAKOSHAM INTRODUCTION.mp3")
+        } else if (audioType === "conclusion") {
+          audioSource = require("../assets/audio/CONCLUSION.mp3")
+        } else {
+          audioSource = { uri: element.audio_url }
         }
       } else {
-        // Demo mode for elements without audio
-        setIsPlaying(true)
-        setPlaybackDuration(180000) // 3 minutes demo
-        setPlaybackPosition(0)
-
-        // Simulate playback progress
-        const interval = setInterval(() => {
-          setPlaybackPosition((prev) => {
-            if (prev >= 180000) {
-              clearInterval(interval)
-              setIsPlaying(false)
-              return 180000
-            }
-            return prev + 1000
-          })
-        }, 1000)
+        audioSource = { uri: element.audio_url }
       }
 
-      setIsLoading(false)
-    } catch (error) {
-      console.error("Error playing element:", error)
+      // Re-configure audio session right before creating the player.
+      // This is the key fix for Android devices that lose audio focus
+      // between successive plays (Xiaomi MIUI, Samsung OneUI, OPPO ColorOS, etc.)
+      await configureAudioSession()
+
+      const newPlayer = createAudioPlayer(audioSource, {
+        updateInterval: 500, // 500ms is enough for a progress bar; reduces CPU on low-end phones
+      })
+
+      newPlayer.addListener("playbackStatusUpdate", (status) => {
+        if (!status.isLoaded) return
+
+        setPlaybackPosition(Math.round((status.currentTime ?? 0) * 1000))
+        setPlaybackDuration(Math.round((status.duration ?? 0) * 1000))
+        setIsPlaying(status.playing ?? false)
+
+        if (status.didJustFinish) {
+          setIsPlaying(false)
+          setPlaybackPosition(0)
+        }
+      })
+
+      newPlayer.play()
+      soundRef.current = newPlayer
+      setSound(newPlayer)
+      setIsPlaying(true)
+    } catch (audioError) {
+      console.error("[Audio] Failed to create/play player:", audioError)
+      // Graceful fallback: show demo progress so the UI still responds
+      setIsPlaying(true)
+      setPlaybackDuration(180000)
+      setPlaybackPosition(0)
+    } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  const togglePlayback = async () => {
-    if (sound) {
+  const togglePlayback = useCallback(() => {
+    const player = soundRef.current
+    if (player) {
       try {
-        const status = await sound.getStatusAsync()
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await sound.pauseAsync()
-          } else {
-            await sound.playAsync()
-          }
+        if (player.playing) {
+          player.pause()
+          setIsPlaying(false)
+        } else {
+          player.play()
+          setIsPlaying(true)
         }
-      } catch (error) {
-        console.error("Error toggling playback:", error)
+      } catch (err) {
+        console.warn("[Audio] togglePlayback error:", err)
       }
     } else {
-      // Fallback for demo mode
+      // Demo mode toggle
       setIsPlaying((prev) => !prev)
     }
-  }
+  }, [])
 
   const normalize = (value: string | number | null | undefined) =>
     (value ?? "")
@@ -230,26 +273,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .replace(/[\u0300-\u036f]/g, "")
       .trim()
 
-  const searchElements = (query: string): Element[] => {
-    const normalizedQuery = normalize(query)
-    if (!normalizedQuery) return []
-
-    return elements.filter((element) => {
-      const haystacks = [
-        element.name,
-        element.symbol,
-        element.number,
-        element.category,
-        element.discovered_by,
-        element.phase,
-        element.summary,
-        element.electron_configuration,
-        element.malayalam_name,
-      ]
-
-      return haystacks.some((field) => normalize(field).includes(normalizedQuery))
-    })
-  }
+  const searchElements = useCallback(
+    (query: string): Element[] => {
+      const normalizedQuery = normalize(query)
+      if (!normalizedQuery) return []
+      return elements.filter((element) => {
+        const haystacks = [
+          element.name,
+          element.symbol,
+          element.number,
+          element.category,
+          element.discovered_by,
+          element.phase,
+          element.summary,
+          element.electron_configuration,
+          element.malayalam_name,
+        ]
+        return haystacks.some((field) => normalize(field).includes(normalizedQuery))
+      })
+    },
+    [elements],
+  )
 
   const contextValue: AppContextType = {
     elements,

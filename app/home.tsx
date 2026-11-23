@@ -1,11 +1,11 @@
 "use client"
 import MiniPlayer from "@/components/MiniPlayer"
 import { Ionicons } from "@expo/vector-icons"
-import { ResizeMode, Video } from "expo-av"
+import { useVideoPlayer, VideoView } from "expo-video"
 import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
-import { Dimensions, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Dimensions, Modal, SafeAreaView, ScrollView, type ScrollViewInstance, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { Fonts } from "../constants/Fonts"
 
 type Section = "home" | "library" | "discover" | "profile"
@@ -34,9 +34,11 @@ export default function AudioBookApp() {
   
   const SCREEN_WIDTH = Dimensions.get("window").width
   const [currentSlide, setCurrentSlide] = useState(0)
-  const sliderRef = useRef<ScrollView>(null)
+  const sliderRef = useRef<ScrollViewInstance>(null)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
-  const previewVideoRef = useRef<Video>(null)
+  const videoSource = require("../assets/images/sarva_2.mp4")
+  const thumbnailPlayer = useVideoPlayer(videoSource)
+  const previewPlayer = useVideoPlayer(videoSource)
 
   // Auto-scroll carousel
   useEffect(() => {
@@ -165,17 +167,19 @@ export default function AudioBookApp() {
           {/* Video Card - sarva_2.mp4 */}
           <TouchableOpacity 
             style={styles.featuredCardTeal}
-            onPress={() => setShowVideoPreview(true)}
+            onPress={() => {
+              previewPlayer.currentTime = 0
+              previewPlayer.play()
+              setShowVideoPreview(true)
+            }}
           >
             <View style={styles.cardIconTop}>
               <View style={styles.featuredVideoContainer}>
-                <Video
-                  source={require("../assets/images/sarva_2.mp4")}
+                <VideoView
+                  player={thumbnailPlayer}
                   style={styles.featuredVideo}
-                  resizeMode={ResizeMode.COVER}
-                  shouldPlay={false}
-                  isLooping={false}
-                  useNativeControls={false}
+                  contentFit="cover"
+                  nativeControls={false}
                 />
                 <View style={styles.videoPlayOverlay}>
                   <Ionicons name="play-circle" size={48} color="#fff" />
@@ -267,7 +271,7 @@ export default function AudioBookApp() {
         animationType="fade"
         onRequestClose={() => {
           setShowVideoPreview(false)
-          previewVideoRef.current?.pauseAsync()
+          previewPlayer.pause()
         }}
       >
         <View style={styles.modalContainer}>
@@ -276,20 +280,17 @@ export default function AudioBookApp() {
               style={styles.closeButton}
               onPress={() => {
                 setShowVideoPreview(false)
-                previewVideoRef.current?.pauseAsync()
+                previewPlayer.pause()
               }}
             >
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
             
-            <Video
-              ref={previewVideoRef}
-              source={require("../assets/images/sarva_2.mp4")}
+            <VideoView
+              player={previewPlayer}
               style={styles.previewVideo}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={true}
-              isLooping={false}
-              useNativeControls={true}
+              contentFit="contain"
+              nativeControls={true}
             />
           </View>
         </View>

@@ -94,7 +94,8 @@ export default function ElementDetailScreen() {
   const seekToPosition = async (positionMillis: number) => {
     if (sound && localPlaybackDuration > 0) {
       try {
-        await sound.setPositionAsync(Math.max(0, Math.min(positionMillis, localPlaybackDuration)))
+        const seekSeconds = Math.max(0, Math.min(positionMillis, localPlaybackDuration)) / 1000
+        await sound.seekTo(seekSeconds)
         setLocalPlaybackPosition(positionMillis)
       } catch (error) {
         console.error("Error seeking to position:", error)

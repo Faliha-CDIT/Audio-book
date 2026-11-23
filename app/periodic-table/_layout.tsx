@@ -104,7 +104,7 @@ export default function PeriodicTableLayout() {
         options={{
           title: "Periodic Table",
           tabBarLabel: "Table",
-          tabBarIcon: ({ color, size }) => <AntDesign name="home" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <AntDesign name="home" size={size} color={typeof color === "string" ? color : undefined} />,
            headerLeft: () => (
             <Pressable onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -117,7 +117,7 @@ export default function PeriodicTableLayout() {
         options={{
           title: "Periodic Table",
           tabBarLabel: "Grid",
-          tabBarIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={typeof color === "string" ? color : undefined} />,
            headerLeft: () => (
             <Pressable onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -131,7 +131,7 @@ export default function PeriodicTableLayout() {
         options={{
           title: "Favorites",
           tabBarLabel: "Favorites",
-          tabBarIcon: ({ color, size }) => <Ionicons name="star-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="star-outline" size={size} color={typeof color === "string" ? color : undefined} />,
            headerLeft: () => (
             <Pressable onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -144,7 +144,7 @@ export default function PeriodicTableLayout() {
         options={{
           title: currentElement ? currentElement.name : "Element Details",
           tabBarLabel: "Element Detail",
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="details" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="details" size={size} color={typeof color === "string" ? color : undefined} />,
           headerLeft: () => (
             <Pressable onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
               <Ionicons name="arrow-back" size={24} color="#fff" />

@@ -4,54 +4,56 @@ const { resolve, join } = require('path');
 
 /**
  * Expo Config Plugin: withNetworkSecurityConfig
- * 
- * This plugin adds an Android Network Security Configuration that enforces
- * SSL/TLS certificate pinning for the app's backend domain (sarva.cditproject.org).
- * This prevents Man-in-the-Middle (MITM) attacks by rejecting any certificate
- * that doesn't match the pinned public keys, even if the attacker has installed
- * a rogue CA certificate on the device.
- * 
+ *
+ * Adds an Android Network Security Configuration that:
+ *   - Blocks cleartext (HTTP) traffic globally.
+ *   - Pins only the STABLE intermediate + root CA keys for sarva.cditproject.org.
+ *
+ * WHY NO LEAF PIN:
+ *   Let's Encrypt renews leaf certificates every ~90 days. Pinning the leaf key
+ *   causes audio/API calls to fail silently on some Android devices whenever the
+ *   cert is renewed, because the pinned SHA-256 no longer matches. By pinning only
+ *   the intermediate (Let's Encrypt E7) and root (ISRG Root X1) we get MITM
+ *   protection that survives routine leaf cert renewals.
+ *
  * Pins included:
- *   - Leaf certificate public key (sarva.cditproject.org)
- *   - Let's Encrypt E7 intermediate CA
- *   - ISRG Root X2 (backup root CA)
- * 
- * IMPORTANT: When the server's SSL certificate is renewed, the leaf pin
- * will change. The intermediate and root pins provide continuity as long
- * as Let's Encrypt is used as the CA. If the CA provider changes, all
- * pins must be updated.
+ *   - Let's Encrypt E7 intermediate CA  (changes only when LE rotates intermediates)
+ *   - ISRG Root X1 root CA              (most stable; changes only if LE changes root)
+ *   - ISRG Root X2 root CA              (future-proof backup)
+ *
+ * IMPORTANT: If the CDN / CA provider changes away from Let's Encrypt,
+ * update all three pins and rebuild.
  */
 
 const NETWORK_SECURITY_CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Default configuration: block cleartext traffic globally -->
+    <!-- Block cleartext (HTTP) traffic on all connections -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
 
-    <!-- Pin certificates for the backend API domain -->
+    <!-- Stable CA-level pins for the backend API domain -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">sarva.cditproject.org</domain>
-        <pin-set expiration="2026-12-31">
+        <pin-set expiration="2028-01-01">
             <!--
-                Leaf certificate public key pin (sarva.cditproject.org)
-                Verified via SSL Labs.
-            -->
-            <pin digest="SHA-256">Uy2TNyL+767SoiAuwAqTWdMm1KdvUQy/h6mrclypvDg=</pin>
-
-            <!--
-                Let's Encrypt E7 intermediate CA pin.
-                Provides continuity during leaf certificate renewals.
+                Let's Encrypt E7 intermediate CA.
+                Survives leaf-cert renewals (~90 days).
             -->
             <pin digest="SHA-256">y7xVm0TVJNahMr2sZydE2jQH8SquXV9yLF9seROHHHU=</pin>
 
             <!--
-                ISRG Root X1 (Let's Encrypt root CA) - backup pin.
-                Most stable pin; changes only if Let's Encrypt changes root CA.
+                ISRG Root X1 (primary Let's Encrypt root).
+                Changes only if Let's Encrypt replaces root CA.
             -->
             <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
+
+            <!--
+                ISRG Root X2 (backup Let's Encrypt root).
+            -->
+            <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvXFuiMMjNqY=</pin>
         </pin-set>
         <trust-anchors>
             <certificates src="system" />

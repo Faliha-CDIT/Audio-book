@@ -8,6 +8,7 @@ import {
   Dimensions,
   PanResponder,
   SafeAreaView,
+  type ScaledSize,
   ScrollView,
   StyleSheet,
   Text,
@@ -84,7 +85,7 @@ export default function TableView() {
 
   // Listen for orientation changes
   useEffect(() => {
-    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+    const subscription = Dimensions.addEventListener("change", ({ window }: { window: ScaledSize }) => {
       const newIsLandscape = window.width > window.height
       setOrientation(newIsLandscape)
       setDimensions({ width: window.width, height: window.height })

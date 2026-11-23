@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useRef, useState } from "react"
-import { Dimensions, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Dimensions, SafeAreaView, ScrollView, type ScrollViewInstance, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { Fonts } from "../constants/Fonts"
 
 type Section = "home" | "library" | "discover" | "profile"
@@ -29,7 +29,7 @@ export default function AudioBookApp() {
 
   const SCREEN_WIDTH = Dimensions.get("window").width
   const [currentSlide, setCurrentSlide] = useState(0)
-  const sliderRef = useRef<ScrollView>(null)
+  const sliderRef = useRef<ScrollViewInstance>(null)
   useEffect(() => {
     const interval = setInterval(() => {
       const nextSlide = (currentSlide + 1) % bookCovers.length
@@ -373,6 +373,12 @@ const styles = StyleSheet.create({
   },
   featuredSection: {
     padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontFamily: Fonts.bold,
+    color: "#fff",
+    marginBottom: 16,
   },
   cardGrid: {
     flexDirection: "row",

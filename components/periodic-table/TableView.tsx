@@ -7,7 +7,9 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  type ScaledSize,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TextInput,
@@ -34,7 +36,7 @@ export default function TableView() {
   const [orientation, setOrientation] = useState(isLandscape)
 
   // For scroll indicators
-  const legendScrollViewRef = useRef<ScrollView>(null)
+  const legendScrollViewRef = useRef<ScrollViewInstance>(null)
   const [showLeftArrow, setShowLeftArrow] = useState(false)
   const [showRightArrow, setShowRightArrow] = useState(true)
   const [contentWidth, setContentWidth] = useState(0)
@@ -51,7 +53,7 @@ export default function TableView() {
 
   // Listen for orientation changes
   useEffect(() => {
-    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+    const subscription = Dimensions.addEventListener("change", ({ window }: { window: ScaledSize }) => {
       const newIsLandscape = window.width > window.height
       setOrientation(newIsLandscape)
     })
