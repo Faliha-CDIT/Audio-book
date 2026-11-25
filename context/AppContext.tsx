@@ -1,9 +1,10 @@
 "use client"
 
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio"
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react"
-import { AppState, Platform } from "react-native"
-import { fetchElements } from "../services/api"
+import { AppState } from "react-native"
+import { fetchElements, getFallbackElements } from "../services/api"
 
 export interface Element {
   name: string
@@ -43,18 +44,18 @@ interface AppContextType {
   stopAudio: () => void
 }
 
+const ELEMENTS_CACHE_KEY = "@sarva_elements_cache_v1"
+
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
 /**
  * Configures the audio session for foreground + background playback.
- * Called once on mount and again when the app returns to foreground
- * (some Android OEMs reset audio focus when returning from background).
  */
 async function configureAudioSession() {
   try {
     await setAudioModeAsync({
-      playsInSilentMode: true,       // iOS: play even on silent switch
-      shouldPlayInBackground: true,  // Keep audio active when app is backgrounded
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
     })
   } catch (err) {
     console.warn("[Audio] setAudioModeAsync failed:", err)
@@ -62,7 +63,8 @@ async function configureAudioSession() {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [elements, setElements] = useState<Element[]>([])
+  // Start with bundled fallback elements so ALL devices display all 118 elements immediately
+  const [elements, setElements] = useState<Element[]>(() => getFallbackElements())
   const [favorites, setFavorites] = useState<number[]>([])
   const [playbackHistory, setPlaybackHistory] = useState<number[]>([])
   const [currentElement, setCurrentElement] = useState<Element | null>(null)
@@ -70,24 +72,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [playbackPosition, setPlaybackPosition] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(0)
   const [sound, setSound] = useState<AudioPlayer | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Use a ref to always access the latest player inside async callbacks
-  // without stale closure issues.
   const soundRef = useRef<AudioPlayer | null>(null)
+  const demoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     soundRef.current = sound
   }, [sound])
+
+  const clearDemoInterval = useCallback(() => {
+    if (demoIntervalRef.current) {
+      clearInterval(demoIntervalRef.current)
+      demoIntervalRef.current = null
+    }
+  }, [])
+
+  // Ensure a single reusable AudioPlayer instance so switching elements has zero ExoPlayer startup delay
+  const getOrCreatePlayer = useCallback((initialSource: any): AudioPlayer => {
+    if (soundRef.current) {
+      return soundRef.current
+    }
+
+    const player = createAudioPlayer(initialSource, {
+      updateInterval: 250,
+      keepAudioSessionActive: true,
+      preferredForwardBufferDuration: 2,
+    })
+
+    player.addListener("playbackStatusUpdate", (status) => {
+      if (!status.isLoaded) return
+
+      setPlaybackPosition(Math.round((status.currentTime ?? 0) * 1000))
+      setPlaybackDuration(Math.round((status.duration ?? 0) * 1000))
+      setIsPlaying(status.playing ?? false)
+
+      if (status.didJustFinish) {
+        setIsPlaying(false)
+        setPlaybackPosition(0)
+      }
+    })
+
+    soundRef.current = player
+    setSound(player)
+    return player
+  }, [])
 
   // Initial setup
   useEffect(() => {
     configureAudioSession()
     loadElements()
 
-    // Re-configure audio focus on Android when the app comes back to foreground,
-    // because some OEMs (Xiaomi, OPPO, Samsung OneUI) release audio focus while
-    // the app is backgrounded, causing subsequent plays to be silent.
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
         configureAudioSession()
@@ -96,31 +131,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => {
       subscription.remove()
-      // Clean up any active player
+      clearDemoInterval()
       soundRef.current?.remove()
+      soundRef.current = null
     }
-  }, [])
+  }, [clearDemoInterval])
 
   const loadElements = async () => {
-    setIsLoading(true)
-    // Retry up to 3 times in case of transient network/certificate issues
+    // 1. Load cached elements if present (instant update if newer than bundled fallback)
+    try {
+      const cached = await AsyncStorage.getItem(ELEMENTS_CACHE_KEY)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setElements(parsed)
+        }
+      }
+    } catch (err) {
+      console.warn("[Cache] Failed to read cached elements:", err)
+    }
+
+    // 2. Refresh from live API in background without blocking the UI
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const elementsData = await fetchElements()
         if (elementsData.length > 0) {
           setElements(elementsData)
+          AsyncStorage.setItem(ELEMENTS_CACHE_KEY, JSON.stringify(elementsData)).catch(() => {})
           break
         }
       } catch (error) {
         console.error(`[API] fetchElements attempt ${attempt + 1} failed:`, error)
-        if (attempt === 2) {
-          console.error("[API] All retries exhausted, elements not loaded")
-        }
-        // Wait 1s before retrying
         await new Promise((r) => setTimeout(r, 1000))
       }
     }
-    setIsLoading(false)
   }
 
   const toggleFavorite = (elementNumber: number) => {
@@ -139,47 +183,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const stopAudio = useCallback(() => {
+    clearDemoInterval()
     const player = soundRef.current
     if (player) {
       try {
         player.pause()
         player.seekTo(0)
-        player.remove()
       } catch (err) {
         console.warn("[Audio] Error stopping audio:", err)
       }
-      soundRef.current = null
-      setSound(null)
     }
     setIsPlaying(false)
     setPlaybackPosition(0)
     setPlaybackDuration(0)
-  }, [])
+  }, [clearDemoInterval])
 
-  const playElement = useCallback(async (element: Element) => {
-    // --- 1. Tear down any currently active player FIRST ---
-    const prevPlayer = soundRef.current
-    if (prevPlayer) {
-      try {
-        prevPlayer.pause()
-        prevPlayer.remove()
-      } catch (_) {}
-      soundRef.current = null
-      setSound(null)
-    }
-
+  const playElement = useCallback((element: Element) => {
+    clearDemoInterval()
     setCurrentElement(element)
     addToHistory(element.number)
+    setPlaybackPosition(0)
 
     if (!element.audio_url) {
-      // ---- Demo mode (no audio URL) ----
+      // Demo mode (no audio URL)
       setIsPlaying(true)
       setPlaybackDuration(180000)
-      setPlaybackPosition(0)
-      const interval = setInterval(() => {
+      demoIntervalRef.current = setInterval(() => {
         setPlaybackPosition((prev) => {
           if (prev >= 180000) {
-            clearInterval(interval)
+            clearDemoInterval()
             setIsPlaying(false)
             return 180000
           }
@@ -188,9 +220,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }, 1000)
       return
     }
-
-    // ---- Real audio ----
-    setIsLoading(true)
 
     try {
       // Resolve the audio source
@@ -208,42 +237,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         audioSource = { uri: element.audio_url }
       }
 
-      // Re-configure audio session right before creating the player.
-      // This is the key fix for Android devices that lose audio focus
-      // between successive plays (Xiaomi MIUI, Samsung OneUI, OPPO ColorOS, etc.)
-      await configureAudioSession()
+      // Non-blocking session refresh so playback starts immediately
+      configureAudioSession()
 
-      const newPlayer = createAudioPlayer(audioSource, {
-        updateInterval: 500, // 500ms is enough for a progress bar; reduces CPU on low-end phones
-      })
-
-      newPlayer.addListener("playbackStatusUpdate", (status) => {
-        if (!status.isLoaded) return
-
-        setPlaybackPosition(Math.round((status.currentTime ?? 0) * 1000))
-        setPlaybackDuration(Math.round((status.duration ?? 0) * 1000))
-        setIsPlaying(status.playing ?? false)
-
-        if (status.didJustFinish) {
-          setIsPlaying(false)
-          setPlaybackPosition(0)
-        }
-      })
-
-      newPlayer.play()
-      soundRef.current = newPlayer
-      setSound(newPlayer)
+      const hadExistingPlayer = Boolean(soundRef.current)
+      const player = getOrCreatePlayer(audioSource)
+      if (hadExistingPlayer) {
+        player.replace(audioSource)
+      }
+      player.play()
       setIsPlaying(true)
     } catch (audioError) {
       console.error("[Audio] Failed to create/play player:", audioError)
-      // Graceful fallback: show demo progress so the UI still responds
       setIsPlaying(true)
       setPlaybackDuration(180000)
       setPlaybackPosition(0)
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+  }, [clearDemoInterval, getOrCreatePlayer])
 
   const togglePlayback = useCallback(() => {
     const player = soundRef.current
@@ -260,7 +270,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         console.warn("[Audio] togglePlayback error:", err)
       }
     } else {
-      // Demo mode toggle
       setIsPlaying((prev) => !prev)
     }
   }, [])

@@ -61,9 +61,11 @@ export default function TableView() {
     return () => subscription?.remove()
   }, [])
 
+  // Only capture responder for 2+ finger gestures so element taps never get stolen
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
+      onMoveShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
       onPanResponderGrant: () => {
         translateX.setOffset(panPosition.x)
         translateY.setOffset(panPosition.y)
@@ -74,21 +76,6 @@ export default function TableView() {
       onPanResponderRelease: () => {
         translateX.flattenOffset()
         translateY.flattenOffset()
-
-        const updatePosition = () => {
-          translateX.removeAllListeners()
-          translateY.removeAllListeners()
-
-          translateX.addListener(({ value }) => {
-            setPanPosition((prev) => ({ ...prev, x: value }))
-          })
-
-          translateY.addListener(({ value }) => {
-            setPanPosition((prev) => ({ ...prev, y: value }))
-          })
-        }
-
-        updatePosition()
       },
     }),
   ).current
@@ -112,8 +99,8 @@ export default function TableView() {
     }
   }, [translateX, translateY])
 
-  const maxRow = Math.max(...elements.map((e) => e.ypos))
-  const maxCol = Math.max(...elements.map((e) => e.xpos))
+  const maxRow = elements.length > 0 ? Math.max(...elements.map((e) => e.ypos)) : 10
+  const maxCol = elements.length > 0 ? Math.max(...elements.map((e) => e.xpos)) : 18
 
   const handleSearch = (text: string) => {
     setSearchQuery(text)

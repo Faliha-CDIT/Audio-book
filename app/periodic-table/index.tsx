@@ -60,13 +60,9 @@ export default function TableView() {
   const leftArrowOpacity = useRef(new Animated.Value(0)).current
   const rightArrowOpacity = useRef(new Animated.Value(1)).current
 
-  // For zooming and panning
+  // For zooming (scrolling is handled cleanly by ScrollViews)
   const scale = useRef(new Animated.Value(1.0)).current
-  const translateX = useRef(new Animated.Value(0)).current
-  const translateY = useRef(new Animated.Value(0)).current
-
-  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 })
-  const [currentScale, setCurrentScale] = useState(1)
+  const currentScaleRef = useRef(1)
 
   // Track pinch zoom state
   const pinchState = useRef({
@@ -94,82 +90,49 @@ export default function TableView() {
     return () => subscription?.remove()
   }, [])
 
+  // Only claim responder for 2-finger pinch gestures so 1-finger element taps and scrolling never get intercepted
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
+      onStartShouldSetPanResponderCapture: (evt) => evt.nativeEvent.touches.length >= 2,
+      onMoveShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length >= 2,
+      onMoveShouldSetPanResponderCapture: (evt) => evt.nativeEvent.touches.length >= 2,
       onPanResponderGrant: (evt) => {
         const touches = evt.nativeEvent.touches as readonly any[]
-
         if (touches.length >= 2) {
-          // Start pinch zoom
           pinchState.initialDistance = getDistance(touches)
-          pinchState.initialScale = currentScale
+          pinchState.initialScale = currentScaleRef.current
           pinchState.isZooming = true
-        } else {
-          // Start pan
-          pinchState.isZooming = false
-          translateX.setOffset(panPosition.x)
-          translateY.setOffset(panPosition.y)
-          translateX.setValue(0)
-          translateY.setValue(0)
         }
       },
-      onPanResponderMove: (evt, gestureState) => {
+      onPanResponderMove: (evt) => {
         const touches = evt.nativeEvent.touches as readonly any[]
-
         if (touches.length >= 2) {
-          // Handle pinch zoom
           const distance = getDistance(touches)
           if (!pinchState.initialDistance) {
             pinchState.initialDistance = distance
           }
 
           const scaleFactor = distance / pinchState.initialDistance
-          let newScale = pinchState.initialScale * scaleFactor
-
-          // Clamp zoom level
-          newScale = Math.max(1, Math.min(3, newScale))
-
+          const newScale = Math.max(1, Math.min(3, pinchState.initialScale * scaleFactor))
           scale.setValue(newScale)
-          setCurrentScale(newScale)
-        } else if (!pinchState.isZooming) {
-          // Handle pan
-          translateX.setValue(gestureState.dx)
-          translateY.setValue(gestureState.dy)
+          currentScaleRef.current = newScale
         }
       },
       onPanResponderRelease: () => {
         pinchState.isZooming = false
-        translateX.flattenOffset()
-        translateY.flattenOffset()
+        pinchState.initialDistance = 0
       },
       onPanResponderTerminationRequest: () => true,
       onPanResponderTerminate: () => {
         pinchState.isZooming = false
-        translateX.flattenOffset()
-        translateY.flattenOffset()
+        pinchState.initialDistance = 0
       },
     }),
   ).current
 
-  useEffect(() => {
-    const xListenerId = translateX.addListener(({ value }) => {
-      setPanPosition((prev) => ({ ...prev, x: value }))
-    })
-
-    const yListenerId = translateY.addListener(({ value }) => {
-      setPanPosition((prev) => ({ ...prev, y: value }))
-    })
-
-    return () => {
-      translateX.removeListener(xListenerId)
-      translateY.removeListener(yListenerId)
-    }
-  }, [translateX, translateY])
-
-  const maxRow = Math.max(...elements.map((e) => e.ypos))
-  const maxCol = Math.max(...elements.map((e) => e.xpos))
+  const maxRow = elements.length > 0 ? Math.max(...elements.map((e) => e.ypos)) : 10
+  const maxCol = elements.length > 0 ? Math.max(...elements.map((e) => e.xpos)) : 18
   
   // Calculate center position for Introduction and Conclusion
   const centerX = Math.ceil(maxCol / 2)
@@ -471,15 +434,21 @@ export default function TableView() {
           minimumZoomScale={1.0}
           showsHorizontalScrollIndicator={true}
           showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
         >
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.periodicTable} showsVerticalScrollIndicator>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.periodicTable}
+            showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+          >
             <Animated.View
               style={[
                 styles.periodicTable,
                 {
                   width: maxCol * (ELEMENT_SIZE + GAP_SIZE),
                   height: (maxRow + 1.5) * (ELEMENT_SIZE + GAP_SIZE) + (orientation ? 20 : 40),
-                  transform: [{ scale }, { translateX }, { translateY }],
+                  transform: [{ scale }],
                 },
               ]}
               {...panResponder.panHandlers}

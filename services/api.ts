@@ -1,3 +1,5 @@
+import elementsFallback from "../data/elementsFallback.json"
+
 // Define the element type based on the API response
 export interface ApiElement {
   name: string
@@ -42,6 +44,10 @@ export const convertApiElement = (apiElement: ApiElement) => {
     audio_url: apiElement.audio_url,
     malayalam_name: apiElement.malayalam_name || null,
   }
+}
+
+export const getFallbackElements = () => {
+  return (elementsFallback as ApiElement[]).map(convertApiElement)
 }
 
 const API_KEY = "ehrXfaA1GBl61kV5ujlMIFELvY4/t/kv3eBLPHEp720="

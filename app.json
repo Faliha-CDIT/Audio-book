@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sarva Audios",
     "slug": "Audio-Book",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/images/icon-3.png",
     "scheme": "audiobook",
@@ -18,7 +18,7 @@
       },
       "package": "com.cdit.audiobook",
       "allowBackup": false,
-      "versionCode": 2,
+      "versionCode": 5,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.MODIFY_AUDIO_SETTINGS",
